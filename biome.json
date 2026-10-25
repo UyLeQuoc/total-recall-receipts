@@ -7,6 +7,7 @@
       "!memwal",
       "!**/dist",
       "!**/node_modules",
+      "!apps/receipts/web/src/components/ui",
       "!apps/web/src/components/ui",
       "!apps/web/public",
       "!**/*.css"

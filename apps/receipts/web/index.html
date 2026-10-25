@@ -9,9 +9,25 @@
       content="Sign a pick with your wallet, seal it on Sui before lock, and see who the group should trust: scored against the books, Polymarket and Kalshi."
     />
     <meta name="robots" content="noindex" />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f7f5ef" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#17171a" />
+    <meta name="application-name" content="Receipts" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#FAF9F6" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#262624" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!--
+      Decide the theme before the first paint, as Remora does (ADR-0066). React applies the same
+      class after mount, which is long enough for a dark-mode reader to get a white flash. Wrapped
+      because storage throws in a private window.
+    -->
+    <script>
+      try {
+        const saved = localStorage.getItem("receipts.theme");
+        const dark =
+          saved === "dark" ||
+          ((saved === null || saved === "system") &&
+            matchMedia("(prefers-color-scheme: dark)").matches);
+        if (dark) document.documentElement.classList.add("dark");
+      } catch {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

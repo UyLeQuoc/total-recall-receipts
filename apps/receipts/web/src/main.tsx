@@ -1,8 +1,12 @@
+import { SearchX } from "lucide-react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Link, Route, Routes } from "react-router";
 import "./index.css";
-import { AppLayout, GroupLayout } from "./components/layout.tsx";
+import { AppLayout, GroupLayout } from "./app/layout.tsx";
+import { EmptyState } from "./components/app/empty-state.tsx";
+import { Page } from "./components/app/page.tsx";
+import { Button } from "./components/ui/button.tsx";
 import { BoardPage } from "./pages/board.tsx";
 import { HomePage } from "./pages/home.tsx";
 import { LearningPage } from "./pages/learning.tsx";
@@ -16,12 +20,18 @@ if (!root) throw new Error("#root missing");
 
 function NotFound() {
   return (
-    <div className="py-16 text-center">
-      <p className="text-lg font-semibold">Nothing here.</p>
-      <Link to="/" className="mt-2 inline-block text-sm underline">
-        Back to the groups
-      </Link>
-    </div>
+    <Page title="Not found">
+      <EmptyState
+        icon={<SearchX />}
+        title="Nothing here"
+        description="This link doesn't match a group or a receipt."
+        action={
+          <Button asChild variant="outline">
+            <Link to="/">Back to the groups</Link>
+          </Button>
+        }
+      />
+    </Page>
   );
 }
 

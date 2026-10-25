@@ -1,25 +1,35 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ChevronRight, Lock, PenLine, Scale, Sparkles, Users } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
+import { EmptyState } from "@/components/app/empty-state";
+import { Page, PageHeader, Section } from "@/components/app/page";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { api } from "../api.ts";
-import { Badge, Button, Card, ErrorNote, SectionTitle, Spinner } from "../components/ui.tsx";
+import { ErrorNote, Spinner } from "../components/receipts.tsx";
 import { ago } from "../format.ts";
 import { keys, useGroups } from "../hooks.ts";
 
 const STEPS = [
   {
+    icon: PenLine,
     title: "Sign your pick",
     body: "Pick a side and how sure you are. Your wallet signs it: no gas, no app account.",
   },
   {
+    icon: Lock,
     title: "Sealed before lock",
     body: "Every few minutes the group's picks are hashed into one root and anchored on Sui.",
   },
   {
+    icon: Scale,
     title: "Scored against the market",
     body: "After the final whistle, everyone is scored against the books, Polymarket and Kalshi.",
   },
   {
+    icon: Sparkles,
     title: "Receipts learns who to trust",
     body: "Trust snapshots go to Walrus Memory, and Receipts' own call cites the one it used.",
   },
@@ -39,51 +49,52 @@ export function HomePage() {
   });
 
   return (
-    <div>
-      <section className="py-4 sm:py-8">
-        <h1 className="max-w-3xl text-3xl font-bold leading-tight tracking-tight sm:text-5xl">
-          The group-chat pick'em that keeps the receipts.
-        </h1>
-        <p className="mt-4 max-w-2xl text-base text-muted sm:text-lg">
-          Call the game before it starts. Your pick is signed by your wallet and sealed on Sui, so
-          nobody can claim they "totally called it" afterwards.
-        </p>
-      </section>
+    <Page title="Receipts">
+      <PageHeader
+        title="The group pick'em that keeps the receipts."
+        description={
+          <>
+            Call the game before it starts. Your pick is signed by your wallet and sealed on Sui, so
+            nobody can claim they "totally called it" afterwards.
+          </>
+        }
+      />
 
-      <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {STEPS.map((s, i) => (
-          <li key={s.title} className="rounded-2xl border border-line bg-card p-4">
-            <span className="tabular text-xs font-semibold text-accent">0{i + 1}</span>
-            <p className="mt-1 font-semibold">{s.title}</p>
-            <p className="mt-1 text-sm text-muted">{s.body}</p>
-          </li>
-        ))}
-      </ol>
-
-      <SectionTitle>Groups</SectionTitle>
-      {groups.isPending ? <Spinner /> : null}
-      <ErrorNote error={groups.error} />
-      <div className="grid gap-3 sm:grid-cols-2">
-        {groups.data?.map((g) => (
-          <Link
-            key={g.id}
-            to={`/g/${g.id}`}
-            className="group rounded-2xl border border-line bg-card p-4 transition hover:border-ink"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <p className="font-semibold group-hover:underline">{g.name}</p>
-              {g.telegram ? <Badge>Telegram</Badge> : null}
-            </div>
-            <p className="mt-1 text-sm text-muted">
-              {g.members} member{g.members === 1 ? "" : "s"} · started {ago(g.createdAt)}
-            </p>
-          </Link>
-        ))}
-      </div>
-
-      <Card className="mt-4">
+      <Section title="Groups">
+        {groups.isPending ? <Spinner /> : null}
+        <ErrorNote error={groups.error} />
+        {groups.data && !groups.data.length ? (
+          <EmptyState
+            icon={<Users />}
+            title="No groups yet"
+            description="Start one below and send the link to your friends."
+          />
+        ) : null}
+        <div className="grid gap-3 sm:grid-cols-2">
+          {groups.data?.map((g) => (
+            <Link
+              key={g.id}
+              to={`/g/${g.id}`}
+              className="group flex items-center gap-3 rounded-xl border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-accent/40"
+            >
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Users className="size-4" />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="truncate font-medium">{g.name}</span>
+                  {g.telegram ? <Badge variant="outline">Telegram</Badge> : null}
+                </span>
+                <span className="text-sm text-muted-foreground">
+                  {g.members} member{g.members === 1 ? "" : "s"} · started {ago(g.createdAt)}
+                </span>
+              </span>
+              <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+            </Link>
+          ))}
+        </div>
         <form
-          className="flex flex-col gap-2 sm:flex-row"
+          className="flex flex-col gap-2 rounded-xl border bg-card p-4 sm:flex-row"
           onSubmit={(e) => {
             e.preventDefault();
             if (name.trim()) create.mutate(name.trim());
@@ -92,22 +103,42 @@ export function HomePage() {
           <label className="sr-only" htmlFor="group-name">
             New group name
           </label>
-          <input
+          <Input
             id="group-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={80}
             placeholder="Name a new group, e.g. Friday NBA"
-            className="min-h-10 flex-1 rounded-xl border border-line bg-paper px-3 text-sm outline-none focus:border-ink"
+            className="flex-1"
           />
           <Button type="submit" disabled={!name.trim() || create.isPending}>
             {create.isPending ? "Creating…" : "Start a group"}
           </Button>
         </form>
-        <div className="mt-2">
-          <ErrorNote error={create.error} />
-        </div>
-      </Card>
-    </div>
+        <ErrorNote error={create.error} />
+      </Section>
+
+      <div id="how" className="scroll-mt-16">
+        <Section
+          title="How it works"
+          description="Nothing here asks you to take Receipts' word for it."
+        >
+          <ol className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {STEPS.map(({ icon: Icon, title, body }, i) => (
+              <li key={title} className="flex flex-col gap-2 rounded-xl border bg-card p-4">
+                <span className="flex items-center gap-2">
+                  <Icon className="size-4 text-primary" aria-hidden />
+                  <span className="tabular text-xs font-medium text-muted-foreground">
+                    Step {i + 1}
+                  </span>
+                </span>
+                <p className="font-medium">{title}</p>
+                <p className="text-sm text-muted-foreground">{body}</p>
+              </li>
+            ))}
+          </ol>
+        </Section>
+      </div>
+    </Page>
   );
 }

@@ -1,10 +1,19 @@
+import { cn } from "cn";
+import { Brain } from "lucide-react";
 import { useEffect } from "react";
 import { useLocation, useParams } from "react-router";
-import { Badge, Card, cx, ErrorNote, Spinner } from "../components/ui.tsx";
+import { EmptyState } from "@/components/app/empty-state";
+import { Badge } from "@/components/ui/badge";
+import { ErrorNote, Spinner } from "../components/receipts.tsx";
 import { ago } from "../format.ts";
 import { useMemories } from "../hooks.ts";
 
-const KIND_TONE = { trust: "good", radar: "pending", insights: "brain", picks: "neutral" } as const;
+const KIND_VARIANT = {
+  trust: "success",
+  radar: "warning",
+  insights: "accent",
+  picks: "outline",
+} as const;
 
 export function MemoryPage() {
   const { id = "" } = useParams();
@@ -17,37 +26,49 @@ export function MemoryPage() {
   }, [target, rows.data]);
 
   return (
-    <div>
-      <p className="max-w-2xl text-sm text-muted">
+    <>
+      <p className="max-w-3xl text-sm text-muted-foreground">
         Every conclusion Receipts acts on is a Walrus Memory on mainnet: trust snapshots, the books
         vs markets radar, members' insights and the picks themselves. The 🧠 chips on the board cite
         these blobs.
       </p>
       {rows.isPending ? <Spinner /> : null}
       <ErrorNote error={rows.error} />
-      <div className="mt-4 flex flex-col gap-3">
+      {rows.data && !rows.data.length ? (
+        <EmptyState
+          icon={<Brain />}
+          title="No memories yet"
+          description="Picks, trust snapshots and insights land here as the group plays."
+        />
+      ) : null}
+      <div className="flex flex-col gap-3">
         {rows.data?.map((r) => {
           const kind = r.namespace.split(":").at(-1) ?? "";
           return (
-            <Card
+            <article
               key={r.id}
               id={r.blobId ?? r.id}
-              className={cx(target && target === r.blobId && "ring-2 ring-brain")}
+              className={cn(
+                "flex scroll-mt-20 flex-col gap-2 rounded-xl border bg-card p-4",
+                target && target === r.blobId && "border-primary/60 ring-3 ring-primary/20",
+              )}
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <Badge tone={KIND_TONE[kind as keyof typeof KIND_TONE] ?? "neutral"}>{kind}</Badge>
-                <span className="text-xs text-muted">{ago(r.createdAt)}</span>
+                <Badge variant={KIND_VARIANT[kind as keyof typeof KIND_VARIANT] ?? "outline"}>
+                  {kind}
+                </Badge>
+                <span className="text-xs text-muted-foreground">{ago(r.createdAt)}</span>
               </div>
-              <p className="mt-2 break-words font-mono text-xs leading-relaxed">
+              <p className="font-mono text-xs leading-relaxed break-words">
                 {r.text || "(text pending)"}
               </p>
-              <p className="mt-2 break-all font-mono text-[11px] text-muted">
+              <p className="font-mono text-xs break-all text-muted-foreground">
                 {r.blobId ? `blob ${r.blobId}` : `status ${r.status}`}
               </p>
-            </Card>
+            </article>
           );
         })}
       </div>
-    </div>
+    </>
   );
 }

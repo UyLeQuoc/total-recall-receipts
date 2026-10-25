@@ -1,5 +1,17 @@
+import { cn } from "cn";
+import { Trophy } from "lucide-react";
 import { useParams } from "react-router";
-import { Badge, Card, cx, ErrorNote, Spinner } from "../components/ui.tsx";
+import { EmptyState } from "@/components/app/empty-state";
+import { Section } from "@/components/app/page";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { ErrorNote, Spinner, StateBadge } from "../components/receipts.tsx";
 import { pct } from "../format.ts";
 import { useScores } from "../hooks.ts";
 
@@ -7,8 +19,8 @@ export function ScoresPage() {
   const { id = "" } = useParams();
   const scores = useScores(id);
   return (
-    <div>
-      <p className="max-w-2xl text-sm text-muted">
+    <>
+      <p className="max-w-3xl text-sm text-muted-foreground">
         Brier score: the squared gap between a forecast and what happened. Lower is better; a coin
         flip scores 0.25. Each voice's score is shrunk toward 0.25 until it has enough results, so
         one lucky call doesn't top the table. Backfilled games count, and they're real lines and
@@ -17,63 +29,69 @@ export function ScoresPage() {
       {scores.isPending ? <Spinner /> : null}
       <ErrorNote error={scores.error} />
       {scores.data && !scores.data.length ? (
-        <p className="mt-4 text-sm text-muted">Nothing has resolved yet.</p>
+        <EmptyState
+          icon={<Trophy />}
+          title="Nothing has resolved yet"
+          description="The table fills in once the group's first game is final."
+        />
       ) : null}
-      <div className="mt-4 flex flex-col gap-4">
-        {scores.data?.map((lg) => (
-          <Card key={lg.league}>
-            <h2 className="text-lg font-semibold">{lg.league}</h2>
-            <div className="-mx-4 mt-3 overflow-x-auto px-4">
-              <table className="w-full min-w-[22rem] text-sm">
-                <thead>
-                  <tr className="text-left text-xs uppercase tracking-wide text-muted">
-                    <th className="py-2 pr-2 font-medium">#</th>
-                    <th className="py-2 pr-2 font-medium">Voice</th>
-                    <th className="py-2 pr-2 text-right font-medium">Right</th>
-                    <th className="py-2 pr-2 text-right font-medium">Brier</th>
-                    <th className="py-2 text-right font-medium">Trust score</th>
-                  </tr>
-                </thead>
-                <tbody className="tabular">
-                  {lg.voices.map((v, i) => {
-                    const member = v.voice.startsWith("member:");
-                    return (
-                      <tr key={v.voice} className="border-t border-line">
-                        <td className="py-2 pr-2 text-muted">{i + 1}</td>
-                        <td className={cx("py-2 pr-2", member && "font-semibold")}>
-                          {v.label} {member ? null : <Badge>source</Badge>}
-                        </td>
-                        <td className="py-2 pr-2 text-right">
-                          {v.hits}/{v.n}
-                        </td>
-                        <td className="py-2 pr-2 text-right">{v.brier.toFixed(3)}</td>
-                        <td className="py-2 text-right font-semibold">{v.shrunk.toFixed(3)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {lg.calibration.length ? (
-              <div className="mt-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted">
-                  Calibration: when someone said…
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {lg.calibration.map((b) => (
-                    <span
-                      key={b.from}
-                      className="tabular rounded-lg border border-line px-2 py-1 text-xs"
-                    >
-                      {pct(b.from)}+ → right {b.hits}/{b.n}
-                    </span>
-                  ))}
-                </div>
+      {scores.data?.map((lg) => (
+        <Section key={lg.league} title={lg.league}>
+          <div className="overflow-hidden rounded-xl border bg-card">
+            <Table className="min-w-[22rem]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10 pl-4">#</TableHead>
+                  <TableHead>Voice</TableHead>
+                  <TableHead className="text-right">Right</TableHead>
+                  <TableHead className="text-right">Brier</TableHead>
+                  <TableHead className="pr-4 text-right">Trust score</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="tabular">
+                {lg.voices.map((v, i) => {
+                  const member = v.voice.startsWith("member:");
+                  return (
+                    <TableRow key={v.voice}>
+                      <TableCell className="pl-4 text-muted-foreground">{i + 1}</TableCell>
+                      <TableCell className={cn(member && "font-medium")}>
+                        <span className="inline-flex items-center gap-2">
+                          {v.label}
+                          {member ? null : <StateBadge state="source" />}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {v.hits}/{v.n}
+                      </TableCell>
+                      <TableCell className="text-right">{v.brier.toFixed(3)}</TableCell>
+                      <TableCell className="pr-4 text-right font-medium">
+                        {v.shrunk.toFixed(3)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+          {lg.calibration.length ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Calibration: when someone said…
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {lg.calibration.map((b) => (
+                  <span
+                    key={b.from}
+                    className="tabular rounded-md border bg-card px-2 py-1 text-xs"
+                  >
+                    {pct(b.from)}+ → right {b.hits}/{b.n}
+                  </span>
+                ))}
               </div>
-            ) : null}
-          </Card>
-        ))}
-      </div>
-    </div>
+            </div>
+          ) : null}
+        </Section>
+      ))}
+    </>
   );
 }

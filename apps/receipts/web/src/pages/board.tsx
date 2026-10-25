@@ -1,18 +1,16 @@
 import { useSignPersonalMessage } from "@mysten/dapp-kit";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { cn } from "cn";
+import { ArrowRight, CalendarClock, CircleCheck, Clock, Wallet } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
+import { EmptyState } from "@/components/app/empty-state";
+import { Section } from "@/components/app/page";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { api, type BoardEvent, type Group, type Member, type PickResult } from "../api.ts";
-import {
-  Badge,
-  BrainChip,
-  Button,
-  Card,
-  cx,
-  ErrorNote,
-  SectionTitle,
-  Spinner,
-} from "../components/ui.tsx";
+import { BrainChip, ErrorNote, Spinner, StateBadge, Tag } from "../components/receipts.tsx";
 import { WalletButton } from "../components/wallet.tsx";
 import { pct, short, until, when } from "../format.ts";
 import { keys, useBoard, useCall, useGroup, useMe, usePicks } from "../hooks.ts";
@@ -28,58 +26,62 @@ export function BoardPage() {
 
   if (group.isError) return <ErrorNote error={group.error} />;
   return (
-    <div>
+    <>
       {group.data ? <Members group={group.data} me={me} /> : <Spinner />}
       {group.data ? <JoinPanel group={group.data} me={me} /> : null}
 
-      <SectionTitle aside={<span className="text-xs text-muted">P(yes) from every voice</span>}>
-        Open markets
-      </SectionTitle>
-      {board.isPending ? <Spinner label="Loading the board…" /> : null}
-      <ErrorNote error={board.error} />
-      {board.data && !board.data.length ? (
-        <p className="text-sm text-muted">
-          Nothing open right now. The worker loads NBA, EPL and the midterms.
-        </p>
-      ) : null}
-      <div className="grid gap-4 lg:grid-cols-2">
-        {board.data?.map((e) => (
-          <MarketCard key={e.id} event={e} groupId={id} me={me} />
-        ))}
-      </div>
+      <Section
+        title="Open markets"
+        actions={<span className="text-xs text-muted-foreground">P(yes) from every voice</span>}
+      >
+        {board.isPending ? <Spinner label="Loading the board…" /> : null}
+        <ErrorNote error={board.error} />
+        {board.data && !board.data.length ? (
+          <EmptyState
+            icon={<CalendarClock />}
+            title="Nothing open right now"
+            description="The worker loads NBA, EPL and the midterms as their lines come out."
+          />
+        ) : null}
+        <div className="grid gap-4 xl:grid-cols-2">
+          {board.data?.map((e) => (
+            <MarketCard key={e.id} event={e} groupId={id} me={me} />
+          ))}
+        </div>
+      </Section>
 
       <RecentPicks groupId={id} />
-    </div>
+    </>
   );
 }
 
 function Members({ group, me }: { group: Group; me: Member | undefined }) {
   if (!group.members.length) {
-    return <p className="text-sm text-muted">No members yet. Be the first to join.</p>;
+    return <p className="text-sm text-muted-foreground">No members yet. Be the first to join.</p>;
   }
   return (
-    <div className="flex flex-wrap gap-2">
+    <ul className="flex flex-wrap gap-2" aria-label="Members">
       {group.members.map((m) => (
-        <span
+        <li
           key={m.id}
-          className={cx(
-            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs",
-            m.id === me?.id ? "border-ink bg-card font-semibold" : "border-line bg-card",
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-1 text-xs",
+            m.id === me?.id && "border-primary/50 bg-primary/5 font-medium",
           )}
         >
           {m.label}
           {m.address ? (
-            <span className="font-mono text-muted" title={m.address}>
+            <span className="font-mono text-muted-foreground" title={m.address}>
               {short(m.address)}
             </span>
           ) : m.telegram ? (
-            <span className="text-muted">Telegram</span>
+            <span className="text-muted-foreground">Telegram</span>
           ) : (
-            <span className="text-muted">no wallet</span>
+            <span className="text-muted-foreground">no wallet</span>
           )}
-        </span>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }
 
@@ -115,21 +117,29 @@ function JoinPanel({ group, me }: { group: Group; me: Member | undefined }) {
 
   if (me) {
     return (
-      <p className="mt-4 text-sm text-muted">
-        You're in as <strong className="text-ink">{me.label}</strong>. Your picks are signed by{" "}
-        <span className="font-mono">{short(me.address ?? "")}</span>.
+      <p className="flex items-start gap-2 text-sm text-muted-foreground">
+        <CircleCheck className="mt-0.5 size-4 shrink-0 text-success" aria-hidden />
+        <span>
+          You're in as <strong className="font-medium text-foreground">{me.label}</strong>. Your
+          picks are signed by <span className="font-mono">{short(me.address ?? "")}</span>.
+        </span>
       </p>
     );
   }
   return (
-    <Card className="mt-4">
+    <Card className="gap-3 px-5">
       {!account ? (
         <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="font-semibold">Join with your wallet</p>
-            <p className="text-sm text-muted">
-              Your wallet signs your picks. Nothing is paid and nothing leaves your wallet.
-            </p>
+          <div className="flex gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Wallet className="size-4" />
+            </span>
+            <div>
+              <p className="font-medium">Join with your wallet</p>
+              <p className="text-sm text-muted-foreground">
+                Your wallet signs your picks. Nothing is paid and nothing leaves your wallet.
+              </p>
+            </div>
           </div>
           <WalletButton />
         </div>
@@ -142,8 +152,8 @@ function JoinPanel({ group, me }: { group: Group; me: Member | undefined }) {
           }}
         >
           <div>
-            <p className="font-semibold">Join {group.name}</p>
-            <p className="text-sm text-muted">
+            <p className="font-medium">Join {group.name}</p>
+            <p className="text-sm text-muted-foreground">
               Signing a message adds <span className="font-mono">{short(account.address)}</span> to
               the group. It costs nothing.
             </p>
@@ -152,20 +162,25 @@ function JoinPanel({ group, me }: { group: Group; me: Member | undefined }) {
             <label className="sr-only" htmlFor="member-name">
               Your name in the group
             </label>
-            <input
+            <Input
               id="member-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={60}
               placeholder="Your name in the group"
-              className="min-h-10 flex-1 rounded-xl border border-line bg-paper px-3 text-sm outline-none focus:border-ink"
+              className="flex-1"
             />
             <Button type="submit" disabled={!name.trim() || join.isPending}>
               {join.isPending ? "Waiting for your wallet…" : "Sign and join"}
             </Button>
           </div>
-          <label className="flex items-center gap-2 text-xs text-muted">
-            <input type="checkbox" checked={test} onChange={(e) => setTest(e.target.checked)} />
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              className="size-4"
+              checked={test}
+              onChange={(e) => setTest(e.target.checked)}
+            />
             I'm only testing: label me "(test)"
           </label>
           <ErrorNote error={join.error} />
@@ -177,19 +192,19 @@ function JoinPanel({ group, me }: { group: Group; me: Member | undefined }) {
 
 function VoiceBar({ label, prob, member }: { label: string; prob: number; member: boolean }) {
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_3rem] items-center gap-x-3 gap-y-1 text-sm">
+    <div className="grid grid-cols-[minmax(0,1fr)_3rem] items-center gap-x-3 text-sm">
       <div className="min-w-0">
-        <div className="flex justify-between gap-2">
-          <span className={cx("truncate", member ? "font-medium" : "text-muted")}>{label}</span>
-        </div>
-        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-line">
+        <span className={cn("block truncate", member ? "font-medium" : "text-muted-foreground")}>
+          {label}
+        </span>
+        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
           <div
-            className={cx("h-full rounded-full", member ? "bg-ink" : "bg-muted")}
+            className={cn("h-full rounded-full", member ? "bg-primary" : "bg-foreground/35")}
             style={{ width: `${Math.round(prob * 100)}%` }}
           />
         </div>
       </div>
-      <span className="tabular text-right font-semibold">{pct(prob)}</span>
+      <span className="tabular text-right font-medium">{pct(prob)}</span>
     </div>
   );
 }
@@ -199,28 +214,28 @@ function ReceiptsCall({ groupId, event }: { groupId: string; event: BoardEvent }
   if (call.isPending) return <Spinner label="Receipts is recalling what it learned…" />;
   if (call.isError || !call.data) {
     return (
-      <p className="text-xs text-muted">
+      <p className="text-xs text-muted-foreground">
         Receipts' call needs Walrus Memory, and it didn't answer just now.
       </p>
     );
   }
   const c = call.data;
   return (
-    <div className="rounded-xl border border-line bg-paper p-3">
+    <div className="flex flex-col gap-2 rounded-lg border border-primary/20 bg-accent/60 p-3">
       {c.prob !== null ? (
         <p className="text-sm">
-          <span className="font-semibold">
+          <span className="font-medium">
             Receipts: {pct(c.prob)} {event.yesLabel}
           </span>
           {c.average !== null ? (
-            <span className="text-muted"> · plain average {pct(c.average)}</span>
+            <span className="text-muted-foreground"> · plain average {pct(c.average)}</span>
           ) : null}
         </p>
       ) : (
-        <p className="text-sm text-muted">No numbers yet for Receipts to weigh.</p>
+        <p className="text-sm text-muted-foreground">No numbers yet for Receipts to weigh.</p>
       )}
       {c.chips.length ? (
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           {c.chips.map((ch) => (
             <BrainChip key={ch.text} chip={ch} groupId={groupId} />
           ))}
@@ -244,7 +259,7 @@ function MarketCard({
   const people = event.voices.filter((v) => v.member);
   return (
     <Card
-      className="flex flex-col gap-4"
+      className="gap-4 px-5"
       data-testid="market"
       data-event={event.id}
       data-league={event.league}
@@ -252,24 +267,27 @@ function MarketCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-semibold leading-snug">{event.title}</p>
-          <p className="text-xs text-muted">
+          <p className="font-medium leading-snug">{event.title}</p>
+          <p className="text-xs text-muted-foreground">
             Yes = {event.yesLabel} · locks {when(event.startsAt)}
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <Badge>{event.league}</Badge>
-          <span className="tabular text-xs text-pending">{until(event.startsAt)}</span>
+          <Tag>{event.league}</Tag>
+          <span className="tabular inline-flex items-center gap-1 text-xs text-warning-foreground">
+            <Clock className="size-3" aria-hidden />
+            {until(event.startsAt)}
+          </span>
         </div>
       </div>
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2.5">
         {sources.length ? (
           sources.map((v) => <VoiceBar key={v.voice} {...v} />)
         ) : (
-          <p className="text-xs text-muted">No book or market line yet.</p>
+          <p className="text-xs text-muted-foreground">No book or market line yet.</p>
         )}
         {people.length ? (
-          <div className="mt-1 flex flex-col gap-2 border-t border-dashed border-line pt-2">
+          <div className="flex flex-col gap-2.5 border-t border-dashed pt-2.5">
             {people.map((v) => (
               <VoiceBar key={v.voice} {...v} />
             ))}
@@ -280,13 +298,19 @@ function MarketCard({
       {mine ? (
         <Link
           to={`/p/${mine.id}`}
-          className="flex items-center justify-between rounded-xl bg-accent-soft px-3 py-2 text-sm text-accent"
+          className="flex items-center justify-between gap-2 rounded-lg bg-success/15 px-3 py-2 text-sm text-success-foreground transition-colors hover:bg-success/25"
         >
           <span>
-            Your pick: <strong>{mine.side === "yes" ? event.yesLabel : event.noLabel}</strong> at{" "}
-            {pct(mine.confidence)}
+            Your pick:{" "}
+            <strong className="font-medium">
+              {mine.side === "yes" ? event.yesLabel : event.noLabel}
+            </strong>{" "}
+            at {pct(mine.confidence)}
           </span>
-          <span className="font-medium">{mine.signed ? "Signed · receipt →" : "Receipt →"}</span>
+          <span className="inline-flex shrink-0 items-center gap-1 font-medium">
+            {mine.signed ? "Signed · receipt" : "Receipt"}
+            <ArrowRight className="size-3.5" aria-hidden />
+          </span>
         </Link>
       ) : me ? (
         <PickForm event={event} groupId={groupId} me={me} />
@@ -330,7 +354,7 @@ function PickForm({ event, groupId, me }: { event: BoardEvent; groupId: string; 
 
   return (
     <form
-      className="flex flex-col gap-3 rounded-xl border border-line p-3"
+      className="flex flex-col gap-3 rounded-lg border bg-background p-3"
       onSubmit={(e) => {
         e.preventDefault();
         pick.mutate();
@@ -339,34 +363,36 @@ function PickForm({ event, groupId, me }: { event: BoardEvent; groupId: string; 
       <fieldset className="grid grid-cols-2 gap-2">
         <legend className="sr-only">Your side</legend>
         {(["yes", "no"] as const).map((s) => (
-          <button
+          <Button
             key={s}
             type="button"
+            variant={side === s ? "default" : "outline"}
             aria-pressed={side === s}
             onClick={() => setSide(s)}
-            className={cx(
-              "min-h-10 rounded-xl border px-3 text-sm font-medium",
-              side === s ? "border-ink bg-ink text-paper" : "border-line bg-card hover:border-ink",
-            )}
+            className="h-auto min-h-9 whitespace-normal py-1.5"
           >
             {s === "yes" ? event.yesLabel : event.noLabel}
-          </button>
+          </Button>
         ))}
       </fieldset>
       <label className="flex items-center gap-3 text-sm">
-        <span className="shrink-0 text-muted">How sure?</span>
+        <span className="shrink-0 text-muted-foreground">How sure?</span>
         <input
           type="range"
           min={50}
           max={99}
           value={confidence}
           onChange={(e) => setConfidence(Number(e.target.value))}
-          className="flex-1"
+          className="min-w-0 flex-1"
           aria-label="Confidence"
         />
-        <span className="tabular w-10 text-right font-semibold">{confidence}%</span>
+        <span className="tabular w-10 text-right font-medium">{confidence}%</span>
       </label>
-      <Button type="submit" disabled={pick.isPending}>
+      <Button
+        type="submit"
+        disabled={pick.isPending}
+        className="h-auto min-h-9 whitespace-normal py-2"
+      >
         {pick.isPending
           ? "Waiting for your wallet…"
           : `Sign and lock in: ${sideLabel} at ${confidence}%`}
@@ -380,39 +406,31 @@ function RecentPicks({ groupId }: { groupId: string }) {
   const picks = usePicks(groupId);
   if (!picks.data?.length) return null;
   return (
-    <>
-      <SectionTitle>Recent picks</SectionTitle>
-      <Card className="divide-y divide-line p-0 sm:p-0">
+    <Section title="Recent picks">
+      <div className="divide-y overflow-hidden rounded-xl border bg-card">
         {picks.data.map((p) => (
           <Link
             key={p.id}
             to={`/p/${p.id}`}
-            className="flex flex-col gap-1 px-4 py-3 hover:bg-paper sm:flex-row sm:items-center sm:justify-between"
+            className="flex flex-col gap-1.5 px-4 py-3 transition-colors hover:bg-accent/40 sm:flex-row sm:items-center sm:justify-between"
           >
             <div className="min-w-0">
               <p className="truncate text-sm">
-                <strong>{p.member}</strong> → {p.sideLabel} at {pct(p.confidence)}
+                <span className="font-medium">{p.member}</span> → {p.sideLabel} at{" "}
+                {pct(p.confidence)}
               </p>
-              <p className="truncate text-xs text-muted">
+              <p className="truncate text-xs text-muted-foreground">
                 {p.title} · {p.league}
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap gap-1">
-              {p.signed ? <Badge tone="good">signed</Badge> : <Badge>unsigned</Badge>}
-              {p.anchored ? (
-                <Badge tone="good">anchored</Badge>
-              ) : (
-                <Badge tone="pending">pending anchor</Badge>
-              )}
-              {p.result === null ? null : p.result ? (
-                <Badge tone="good">right</Badge>
-              ) : (
-                <Badge tone="bad">wrong</Badge>
-              )}
+              <StateBadge state={p.signed ? "signed" : "unsigned"} />
+              <StateBadge state={p.anchored ? "anchored" : "pending anchor"} />
+              {p.result === null ? null : <StateBadge state={p.result ? "right" : "wrong"} />}
             </div>
           </Link>
         ))}
-      </Card>
-    </>
+      </div>
+    </Section>
   );
 }

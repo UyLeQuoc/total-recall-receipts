@@ -11,4 +11,4 @@ that weren't copied are plain text. New decisions continue from 0066.
 | [0063](0063-structured-records-skip-dedupe.md) | Receipts and Kitty write structured records without the semantic duplicate check |
 | [0064](0064-receipts-kitty-web-with-wallets.md) | Receipts and Kitty: a React web with wallets is the main surface, Telegram is optional |
 | [0065](0065-split-receipts-and-kitty-repos.md) | Split Receipts and Kitty into their own public repos |
-
+| [0066](0066-remora-design-system.md) | Receipts' web uses Remora's design system |

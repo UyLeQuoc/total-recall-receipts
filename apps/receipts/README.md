@@ -47,8 +47,9 @@ Track 1 (Markets & Sports Prediction). Split out of the Remora monorepo ([ADR-00
    with real lines and real results, labelled "backfill".
 
 ## The web (ADR-0064)
-A React app in `web/` (Vite, Tailwind, TanStack Query, `@mysten/dapp-kit` on testnet over gRPC-web). It
-uses the same paths the bot links to:
+A React app in `web/` (Vite, Tailwind, TanStack Query, `@mysten/dapp-kit` on testnet over gRPC-web), in
+Remora's design system: its tokens, shadcn kit and sidebar shell, light and dark
+([ADR-0066](../../docs/adr/0066-remora-design-system.md)). It uses the same paths the bot links to:
 
 | Path | Page |
 |---|---|
