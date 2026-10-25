@@ -1,0 +1,57 @@
+{
+  "events": [
+    {
+      "id": "401909853",
+      "date": "2026-10-24T22:00Z",
+      "competitions": [
+        {
+          "status": {
+            "type": {
+              "state": "pre",
+              "completed": false
+            }
+          },
+          "competitors": [
+            {
+              "homeAway": "home",
+              "score": "0",
+              "team": {
+                "abbreviation": "CHA",
+                "displayName": "Charlotte Hornets",
+                "shortDisplayName": "Hornets"
+              }
+            },
+            {
+              "homeAway": "away",
+              "score": "0",
+              "team": {
+                "abbreviation": "MIA",
+                "displayName": "Miami Heat",
+                "shortDisplayName": "Heat"
+              }
+            }
+          ],
+          "odds": [
+            {
+              "provider": {
+                "name": "Draft Kings"
+              },
+              "moneyline": {
+                "home": {
+                  "close": {
+                    "odds": "+120"
+                  }
+                },
+                "away": {
+                  "close": {
+                    "odds": "-142"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

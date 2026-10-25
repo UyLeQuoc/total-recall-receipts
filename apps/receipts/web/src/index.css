@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+/*
+ * Receipts' look (ADR-0064): receipt paper and ink. Warm off-white paper, near-black ink, one green for
+ * "verified" and "right", amber for "pending", rose for "wrong" and "failed". Numbers are tabular.
+ */
+@theme {
+  --color-paper: #f7f5ef;
+  --color-card: #ffffff;
+  --color-ink: #1c1917;
+  --color-muted: #6b6560;
+  --color-line: #e7e2d8;
+  --color-accent: #059669;
+  --color-accent-soft: #d1fae5;
+  --color-pending: #b45309;
+  --color-pending-soft: #fef3c7;
+  --color-bad: #be123c;
+  --color-bad-soft: #ffe4e6;
+  --color-brain: #6d28d9;
+  --color-brain-soft: #ede9fe;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-paper: #17171a;
+    --color-card: #1f1f23;
+    --color-ink: #f4f1ea;
+    --color-muted: #a29d96;
+    --color-line: #34343a;
+    --color-accent: #34d399;
+    --color-accent-soft: #064e3b;
+    --color-pending: #fbbf24;
+    --color-pending-soft: #451a03;
+    --color-bad: #fb7185;
+    --color-bad-soft: #4c0519;
+    --color-brain: #c4b5fd;
+    --color-brain-soft: #2e1065;
+  }
+}
+
+html,
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The zigzag edge at the bottom of a receipt card. */
+.receipt-edge {
+  position: relative;
+}
+.receipt-edge::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -8px;
+  height: 8px;
+  background: linear-gradient(-45deg, transparent 6px, var(--color-card) 0) 0 0 / 12px 8px repeat-x,
+    linear-gradient(45deg, transparent 6px, var(--color-card) 0) 0 0 / 12px 8px repeat-x;
+}
+
+input[type="range"] {
+  accent-color: var(--color-accent);
+}
