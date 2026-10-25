@@ -1,7 +1,7 @@
 # Architecture Decision Records
 
 These decisions were made in the Remora monorepo and keep their numbers there. Links to Remora docs
-that weren't copied are plain text. New decisions continue from 0066.
+that weren't copied are plain text. New decisions continue from 0066; Remora's own ADR-0066 (agents through MCP) is cited by number.
 
 | ADR | Decision |
 |---|---|
@@ -12,3 +12,4 @@ that weren't copied are plain text. New decisions continue from 0066.
 | [0064](0064-receipts-kitty-web-with-wallets.md) | Receipts and Kitty: a React web with wallets is the main surface, Telegram is optional |
 | [0065](0065-split-receipts-and-kitty-repos.md) | Split Receipts and Kitty into their own public repos |
 | [0066](0066-remora-design-system.md) | Receipts' web uses Remora's design system |
+| [0067](0067-agents-as-forecasters.md) | Agents as forecasters: owner delegations, agent-signed picks (v3 leaf), stdio and read-only remote MCP, and this repo's own testnet sponsor |

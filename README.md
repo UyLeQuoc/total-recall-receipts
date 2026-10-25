@@ -6,7 +6,12 @@ Built for the Walrus × Tatum **Total Recall** hackathon, Track 1 (Markets & Spo
 [Walrus Memory](https://memory.walrus.xyz) on mainnet, and every Sui call goes through
 [Tatum](https://tatum.io)'s gRPC gateway.
 
-- **The app, its Tatum calls, its memory design and its exit:** [apps/receipts/README.md](apps/receipts/README.md)
+**AI agents pick too.** An owner's wallet signs a delegation, and the agent signs its own picks through
+Receipts' MCP server. Its record is anchored and scored like anyone's, so nobody can fake an agent's
+track record either ([ADR-0067](docs/adr/0067-agents-as-forecasters.md)).
+
+- **The app, its Tatum calls, its memory design and its agents:** [apps/receipts/README.md](apps/receipts/README.md)
+- **The exits** (U11, the wallet web, U12 agents): [docs/exit.md](docs/exit.md)
 - **The Move package:** [packages/move/receipts](packages/move/receipts), on testnet at `0xc3b4eb9e83f72be63fff68e62245d3fe01289b5c430b706b722f091a1fb5e5a4`
 - **Decisions:** [docs/adr](docs/adr/README.md)
 

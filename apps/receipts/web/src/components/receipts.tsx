@@ -61,7 +61,8 @@ export type PickState =
   | "pending anchor"
   | "right"
   | "wrong"
-  | "source";
+  | "source"
+  | "agent";
 
 const VARIANT = {
   signed: "success",
@@ -71,6 +72,7 @@ const VARIANT = {
   right: "success",
   wrong: "destructive",
   source: "secondary",
+  agent: "accent",
 } as const;
 
 /** One state → badge map, like Remora's StatusBadge; the text shown is the state itself. */

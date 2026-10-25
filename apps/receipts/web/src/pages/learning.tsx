@@ -1,12 +1,12 @@
-import { ChartLine } from "lucide-react";
+import { Bot, ChartLine } from "lucide-react";
 import { useParams } from "react-router";
 import { EmptyState } from "@/components/app/empty-state";
 import { StatTile } from "@/components/app/stat-tile";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import type { CurvePoint } from "../api.ts";
-import { ErrorNote, Spinner, Tag } from "../components/receipts.tsx";
-import { useLearning } from "../hooks.ts";
+import type { CurvePoint, LeagueScores } from "../api.ts";
+import { ErrorNote, Spinner, StateBadge, Tag } from "../components/receipts.tsx";
+import { useLearning, useScores } from "../hooks.ts";
 
 /** Remora's chart tokens: the call in the primary indigo, the books in amber, the average muted. */
 const SERIES = [
@@ -87,9 +87,58 @@ function Curve({ points, title }: { points: CurvePoint[]; title: string }) {
   );
 }
 
+const SOURCES = new Set(["books", "polymarket", "kalshi"]);
+
+/**
+ * Agents next to the field (ADR-0066): each agent's Brier beside the books, the markets and the best
+ * person, so an owner sees whether their agent earns its trust.
+ */
+function AgentsVsField({ scores }: { scores: LeagueScores[] }) {
+  const leagues = scores
+    .map((lg) => {
+      const agents = lg.voices.filter((v) => v.voice.startsWith("agent:"));
+      const sources = lg.voices.filter((v) => SOURCES.has(v.voice));
+      const people = lg.voices.filter((v) => v.voice.startsWith("member:")).slice(0, 1);
+      return { league: lg.league, rows: [...agents, ...sources, ...people], agents: agents.length };
+    })
+    .filter((lg) => lg.agents);
+  if (!leagues.length) return null;
+  return (
+    <section className="flex flex-col gap-3" data-testid="agents-vs-field">
+      <h2 className="flex items-center gap-2 text-base font-semibold">
+        <Bot className="size-4 text-primary" aria-hidden />
+        Agents next to the field
+      </h2>
+      {leagues.map((lg) => (
+        <Card key={lg.league} className="gap-2 px-5">
+          <p className="text-sm font-medium">{lg.league}</p>
+          <ul className="flex flex-col divide-y text-sm">
+            {[...lg.rows]
+              .sort((a, b) => a.shrunk - b.shrunk)
+              .map((v) => (
+                <li key={v.voice} className="flex items-center justify-between gap-3 py-2">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate">{v.label}</span>
+                    {v.voice.startsWith("agent:") ? <StateBadge state="agent" /> : null}
+                    {SOURCES.has(v.voice) ? <StateBadge state="source" /> : null}
+                  </span>
+                  <span className="tabular shrink-0 text-muted-foreground">
+                    {v.hits}/{v.n} ·{" "}
+                    <span className="font-medium text-foreground">{v.brier.toFixed(3)}</span>
+                  </span>
+                </li>
+              ))}
+          </ul>
+        </Card>
+      ))}
+    </section>
+  );
+}
+
 export function LearningPage() {
   const { id = "" } = useParams();
   const learning = useLearning(id);
+  const scores = useScores(id);
   return (
     <>
       <p className="max-w-3xl text-sm text-muted-foreground">
@@ -106,6 +155,7 @@ export function LearningPage() {
           description="The curve starts once a game this group can be scored on is final."
         />
       ) : null}
+      {scores.data ? <AgentsVsField scores={scores.data} /> : null}
       <div className="flex flex-col gap-6" data-testid="learning">
         {learning.data?.map((lg) => {
           const last = lg.curve.at(-1);

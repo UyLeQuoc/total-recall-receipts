@@ -1,7 +1,7 @@
 import { useSignPersonalMessage } from "@mysten/dapp-kit";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "cn";
-import { ArrowRight, CalendarClock, CircleCheck, Clock, Wallet } from "lucide-react";
+import { ArrowRight, Bot, CalendarClock, CircleCheck, Clock, Wallet } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { EmptyState } from "@/components/app/empty-state";
@@ -67,8 +67,10 @@ function Members({ group, me }: { group: Group; me: Member | undefined }) {
           className={cn(
             "inline-flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-1 text-xs",
             m.id === me?.id && "border-primary/50 bg-primary/5 font-medium",
+            m.agentOf && "border-primary/30 bg-accent/50",
           )}
         >
+          {m.agentOf ? <Bot className="size-3.5 text-primary" aria-label="Agent" /> : null}
           {m.label}
           {m.address ? (
             <span className="font-mono text-muted-foreground" title={m.address}>
@@ -190,12 +192,28 @@ function JoinPanel({ group, me }: { group: Group; me: Member | undefined }) {
   );
 }
 
-function VoiceBar({ label, prob, member }: { label: string; prob: number; member: boolean }) {
+function VoiceBar({
+  label,
+  prob,
+  member,
+  agent,
+}: {
+  label: string;
+  prob: number;
+  member: boolean;
+  agent?: boolean;
+}) {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_3rem] items-center gap-x-3 text-sm">
       <div className="min-w-0">
-        <span className={cn("block truncate", member ? "font-medium" : "text-muted-foreground")}>
-          {label}
+        <span
+          className={cn(
+            "flex items-center gap-1.5 truncate",
+            member ? "font-medium" : "text-muted-foreground",
+          )}
+        >
+          {agent ? <Bot className="size-3.5 shrink-0 text-primary" aria-label="Agent" /> : null}
+          <span className="truncate">{label}</span>
         </span>
         <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
           <div
@@ -421,9 +439,11 @@ function RecentPicks({ groupId }: { groupId: string }) {
               </p>
               <p className="truncate text-xs text-muted-foreground">
                 {p.title} · {p.league}
+                {p.reason ? ` · “${p.reason}”` : ""}
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap gap-1">
+              {p.agent ? <StateBadge state="agent" /> : null}
               <StateBadge state={p.signed ? "signed" : "unsigned"} />
               <StateBadge state={p.anchored ? "anchored" : "pending anchor"} />
               {p.result === null ? null : <StateBadge state={p.result ? "right" : "wrong"} />}

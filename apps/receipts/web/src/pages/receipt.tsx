@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import {
   ArrowLeft,
   ArrowUpRight,
+  Bot,
   CircleCheck,
   CircleX,
   ReceiptText,
@@ -104,7 +105,8 @@ export function ReceiptPage() {
         <ErrorNote error={page.error} />
       </Page>
     );
-  const { receipt: r, member, event, group, sideLabel, explorer } = page.data;
+  const { receipt: r, member, event, group, sideLabel, explorer, owner, reason } = page.data;
+  const agent = !!r.pick.delegationId;
   const resolved = event && event.outcome !== null;
   const right = resolved && (event.outcome === 1) === (r.pick.side === "yes");
 
@@ -136,8 +138,30 @@ export function ReceiptPage() {
         <h1 className="mt-2 text-xl font-semibold tracking-tight md:text-2xl">{r.event.title}</h1>
         <dl className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 text-sm">
           <Row label="Who">
-            <span className="font-medium">{member?.label ?? r.pick.memberId}</span>
+            <span className="font-medium" data-testid="who">
+              {agent ? (
+                <Bot className="mr-1.5 inline size-4 align-[-3px] text-primary" aria-hidden />
+              ) : null}
+              {member?.label ?? r.pick.memberId}
+              {agent ? (
+                <Badge variant="accent" className="ml-2 align-middle">
+                  agent
+                </Badge>
+              ) : null}
+            </span>
           </Row>
+          {agent && owner ? (
+            <Row label="For">
+              <span>{owner.label}</span>
+            </Row>
+          ) : null}
+          {agent && reason ? (
+            <Row label="Agent's reason">
+              <span className="text-muted-foreground" data-testid="reason">
+                “{reason}”
+              </span>
+            </Row>
+          ) : null}
           <Row label="Pick">
             <span className="font-medium">
               {sideLabel} at <span className="tabular">{pct(r.pick.confidence)}</span>
@@ -157,7 +181,7 @@ export function ReceiptPage() {
               </span>
             </Row>
           ) : null}
-          <Row label="Signed by">
+          <Row label={agent ? "Agent's key" : "Signed by"}>
             {r.pick.signer ? (
               <span className="font-mono text-xs break-all" data-testid="signer">
                 {r.pick.signer}
@@ -172,10 +196,28 @@ export function ReceiptPage() {
         </dl>
         {r.signedMessage ? (
           <details className="mt-4 rounded-lg bg-muted p-3 text-xs">
-            <summary className="cursor-pointer font-medium">What the wallet signed</summary>
+            <summary className="cursor-pointer font-medium">
+              {agent ? "What the agent signed" : "What the wallet signed"}
+            </summary>
             <pre className="mt-2 font-mono break-all whitespace-pre-wrap text-muted-foreground">
               {r.signedMessage}
             </pre>
+          </details>
+        ) : null}
+        {r.delegation ? (
+          <details className="mt-2 rounded-lg bg-muted p-3 text-xs" data-testid="delegation">
+            <summary className="cursor-pointer font-medium">
+              What the owner signed: the delegation
+              {r.delegation.revokedAt ? `, revoked ${when(r.delegation.revokedAt)}` : ""}
+            </summary>
+            <pre className="mt-2 font-mono break-all whitespace-pre-wrap text-muted-foreground">
+              {r.delegation.message}
+            </pre>
+            {r.delegation.revokeMessage ? (
+              <pre className="mt-2 border-t border-dashed pt-2 font-mono break-all whitespace-pre-wrap text-muted-foreground">
+                {r.delegation.revokeMessage}
+              </pre>
+            ) : null}
           </details>
         ) : null}
         {/* The tear line of a paper receipt. */}

@@ -4,11 +4,15 @@
  *
  * A member who joined with a wallet must sign each pick (ADR-0064). The server rebuilds the message
  * from its own records, checks the signature, and puts the signer and signature in the leaf.
+ *
+ * An agent (ADR-0066) is a member with `agentOf`. Its own key signs each pick, the message names the
+ * owner's delegation, and the delegation must be live when the pick is made. The leaf is v3.
  */
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
+import { delegationProblem } from "./agents.ts";
 import type { Anchorer } from "./chain.ts";
-import { anchors, type Db, events, members, picks } from "./db/index.ts";
+import { anchors, type Db, delegations, events, members, picks } from "./db/index.ts";
 import { type Chip, nudgeFor } from "./learn.ts";
 import { parseConfidence, pct, type Side } from "./markets.ts";
 import { ns, type ReceiptsMemory } from "./memory.ts";
@@ -25,7 +29,8 @@ export class PickError extends Error {
       | "duplicate"
       | "not_member"
       | "signature_required"
-      | "bad_signature",
+      | "bad_signature"
+      | "not_delegated",
     message: string,
   ) {
     super(message);
@@ -53,6 +58,8 @@ export interface PickInput {
   signature?: string;
   /** The `at` inside the signed message (the signer's clock). */
   signedAt?: string;
+  /** An agent's pick: the owner's delegation it's made under (ADR-0066). */
+  delegationId?: string;
   now?: Date;
 }
 
@@ -77,8 +84,16 @@ export async function logPick(deps: PickDeps, input: PickInput) {
   if (confidence === null) throw new PickError("bad_confidence", "Confidence is 50–99%.");
   const sideLabel = input.side === "yes" ? event.yesLabel : event.noLabel;
 
-  let signed: { signer: string; signature: string; message: string } | null = null;
-  if (member.address) {
+  let signed: {
+    signer: string;
+    signature: string;
+    message: string;
+    delegationId?: string;
+    owner?: { id: string; name: string };
+  } | null = null;
+  if (member.agentOf) {
+    signed = await agentSignature(db, { input, member, event, sideLabel, confidence, now });
+  } else if (member.address) {
     if (!input.signature || !input.signedAt) {
       throw new PickError("signature_required", "Sign the pick with your wallet.");
     }
@@ -113,6 +128,7 @@ export async function logPick(deps: PickDeps, input: PickInput) {
     confidence,
     createdAt: now.toISOString(),
     ...(signed ? { signer: signed.signer, signature: signed.signature } : {}),
+    ...(signed?.delegationId ? { delegationId: signed.delegationId } : {}),
   };
   const row = {
     ...leaf,
@@ -122,6 +138,7 @@ export async function logPick(deps: PickDeps, input: PickInput) {
     signer: signed?.signer ?? null,
     signature: signed?.signature ?? null,
     signedMessage: signed?.message ?? null,
+    delegationId: signed?.delegationId ?? null,
   };
   try {
     await db.insert(picks).values(row);
@@ -133,7 +150,10 @@ export async function logPick(deps: PickDeps, input: PickInput) {
   }
 
   if (deps.memory) {
-    const text = `PICK member=${member.id}${member.test ? " (test)" : ""} event=${event.id} "${event.title}" side=${input.side} (${sideLabel}) confidence=${confidence.toFixed(2)} at=${now.toISOString()} leaf=${row.leaf}${signed ? ` signed=${signed.signer}` : ""}`;
+    const who = signed?.owner
+      ? `agent=${signed.signer} "${member.name}" for member=${signed.owner.id}`
+      : `member=${member.id}`;
+    const text = `PICK ${who}${member.test ? " (test)" : ""} event=${event.id} "${event.title}" side=${input.side} (${sideLabel}) confidence=${confidence.toFixed(2)} at=${now.toISOString()} leaf=${row.leaf}${signed ? ` signed=${signed.signer}` : ""}`;
     deps.memory
       .remember(ns.picks(input.groupId), "episode", text)
       .catch((err) => deps.log?.("pick.memory_failed", { id, error: String(err) }));
@@ -142,7 +162,7 @@ export async function logPick(deps: PickDeps, input: PickInput) {
     anchorPending(deps).catch((err) => deps.log?.("anchor.failed", { error: String(err) }));
   }
   let nudge: Chip | null = null;
-  if (deps.memory) {
+  if (deps.memory && !member.agentOf) {
     nudge = await nudgeFor(deps.memory, member.id, event.league, confidence).catch(() => null);
   }
   return {
@@ -150,6 +170,57 @@ export async function logPick(deps: PickDeps, input: PickInput) {
     event,
     member,
     nudge,
+  };
+}
+
+/** An agent's pick: its own key signed a message that names a live delegation (ADR-0066). */
+async function agentSignature(
+  db: Db,
+  c: {
+    input: PickInput;
+    member: typeof members.$inferSelect;
+    event: typeof events.$inferSelect;
+    sideLabel: string;
+    confidence: number;
+    now: Date;
+  },
+) {
+  const { input, member, event, now } = c;
+  if (!input.signature || !input.signedAt || !input.delegationId) {
+    throw new PickError("signature_required", "An agent signs each pick with its own key.");
+  }
+  const [d] = await db
+    .select()
+    .from(delegations)
+    .where(and(eq(delegations.id, input.delegationId), eq(delegations.groupId, input.groupId)));
+  if (!d || d.agentMemberId !== member.id) {
+    throw new PickError("not_delegated", "No delegation lets this agent pick in this group.");
+  }
+  const problem = delegationProblem(d, now);
+  if (problem) throw new PickError("not_delegated", problem);
+  if (!freshAt(input.signedAt, now)) {
+    throw new PickError("bad_signature", "The signed time is more than 5 minutes off. Sign again.");
+  }
+  const [owner] = await db.select().from(members).where(eq(members.id, d.ownerMemberId));
+  const message = pickMessage({
+    groupId: input.groupId,
+    eventId: event.id,
+    eventTitle: event.title,
+    side: input.side,
+    sideLabel: c.sideLabel,
+    confidencePct: Math.round(c.confidence * 100),
+    at: input.signedAt,
+    agentFor: { owner: d.owner, ownerName: owner?.name ?? "", delegationId: d.id },
+  });
+  if (!(await signedBy(message, input.signature, member.address as string))) {
+    throw new PickError("bad_signature", "The signature isn't this agent's over this pick.");
+  }
+  return {
+    signer: member.address as string,
+    signature: input.signature,
+    message,
+    delegationId: d.id,
+    owner: { id: d.ownerMemberId, name: owner?.name ?? "" },
   };
 }
 
@@ -210,8 +281,22 @@ export interface Receipt {
   proof: ProofStep[];
   anchor: { digest: string; root: string; network: string } | null;
   event: { id: string; title: string; locksAt: string };
-  /** The exact text the wallet signed, for a signed (v2) pick. */
+  /** The exact text the wallet signed, for a signed (v2, v3) pick. */
   signedMessage?: string;
+  /** An agent's pick (v3): the owner's signed delegation, and its revocation if there is one. */
+  delegation?: ReceiptDelegation;
+}
+
+export interface ReceiptDelegation {
+  id: string;
+  owner: string;
+  agent: string;
+  until: string;
+  message: string;
+  signature: string;
+  revokedAt?: string;
+  revokeMessage?: string;
+  revokeSignature?: string;
 }
 
 /** The portable receipt: everything a stranger needs to check the pick against the chain. */
@@ -229,12 +314,31 @@ export async function receiptFor(db: Db, pickId: string): Promise<Receipt | null
     confidence: p.confidence,
     createdAt: p.createdAt.toISOString(),
     ...(p.signer && p.signature ? { signer: p.signer, signature: p.signature } : {}),
+    ...(p.delegationId ? { delegationId: p.delegationId } : {}),
   };
+  const [d] = p.delegationId
+    ? await db.select().from(delegations).where(eq(delegations.id, p.delegationId))
+    : [];
   const base = {
     pick,
     leaf: p.leaf,
     event: { id: event.id, title: event.title, locksAt: event.startsAt.toISOString() },
     ...(p.signedMessage ? { signedMessage: p.signedMessage } : {}),
+    ...(d
+      ? {
+          delegation: {
+            id: d.id,
+            owner: d.owner,
+            agent: d.agent,
+            until: d.until.toISOString(),
+            message: d.message,
+            signature: d.signature,
+            ...(d.revokedAt ? { revokedAt: d.revokedAt.toISOString() } : {}),
+            ...(d.revokeMessage ? { revokeMessage: d.revokeMessage } : {}),
+            ...(d.revokeSignature ? { revokeSignature: d.revokeSignature } : {}),
+          },
+        }
+      : {}),
   };
   if (!p.anchorId) return { ...base, proof: [], anchor: null };
   const [a] = await db.select().from(anchors).where(eq(anchors.id, p.anchorId));

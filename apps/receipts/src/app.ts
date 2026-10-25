@@ -3,14 +3,34 @@
  * other path serves the React app, at the same paths the bot links to.
  */
 import { randomUUID } from "node:crypto";
-import { and, count, desc, eq, inArray, like } from "drizzle-orm";
-import { Hono } from "hono";
+import { and, count, desc, eq, inArray, isNotNull, like } from "drizzle-orm";
+import { type Context, Hono } from "hono";
 import { z } from "zod";
+import {
+  AgentError,
+  createToken,
+  delegate,
+  delegationProblem,
+  latestDelegation,
+  revokeToken,
+  undelegate,
+} from "./agents.ts";
 import type { Anchorer } from "./chain.ts";
 import { explorerTx } from "./chain.ts";
-import { type Db, events, groups, members, memories, picks, quotes } from "./db/index.ts";
+import {
+  type Db,
+  delegations,
+  events,
+  groups,
+  mcpTokens,
+  members,
+  memories,
+  picks,
+  quotes,
+} from "./db/index.ts";
 import { openEvents } from "./ingest.ts";
 import {
+  agentVoice,
   forecastsOf,
   learn,
   marketProbs,
@@ -18,6 +38,7 @@ import {
   type ReceiptsCall,
   receiptsCall,
 } from "./learn.ts";
+import { mountMcp } from "./mcp/http.ts";
 import type { ReceiptsMemory } from "./memory.ts";
 import { freshAt, joinMessage } from "./messages.ts";
 import { anchorPending, logPick, PickError, type Receipt, receiptFor } from "./picks.ts";
@@ -44,20 +65,35 @@ const SOURCE_LABEL: Record<string, string> = {
 
 type MemberRow = typeof members.$inferSelect;
 
-const memberLabel = (m: Pick<MemberRow, "name" | "test">) => `${m.name}${m.test ? " (test)" : ""}`;
+const testTag = (m: Pick<MemberRow, "test">) => (m.test ? " (test)" : "");
 
-const memberView = (m: MemberRow) => ({
-  id: m.id,
-  name: m.name,
-  label: memberLabel(m),
-  test: m.test,
-  address: m.address,
-  telegram: !!m.telegramUserId,
-});
+/** "Ava (test)", or for an agent "Forecaster, agent for Ava (test)" (ADR-0066). */
+function memberLabel(m: Pick<MemberRow, "name" | "test" | "agentOf">, owner?: MemberRow) {
+  if (m.agentOf) return `${m.name}, agent for ${owner?.name ?? "a member"}${testTag(m)}`;
+  return `${m.name}${testTag(m)}`;
+}
+
+function memberView(m: MemberRow, all: MemberRow[] = []) {
+  const owner = m.agentOf ? all.find((o) => o.id === m.agentOf) : undefined;
+  return {
+    id: m.id,
+    name: m.name,
+    label: memberLabel(m, owner),
+    test: m.test,
+    address: m.address,
+    telegram: !!m.telegramUserId,
+    agentOf: m.agentOf,
+  };
+}
 
 async function labeller(db: Db, groupId: string) {
   const ms = await db.select().from(members).where(eq(members.groupId, groupId));
-  const names = new Map(ms.map((m) => [memberVoice(m.id), memberLabel(m)]));
+  const names = new Map<string, string>();
+  for (const m of ms) {
+    const label = memberView(m, ms).label;
+    names.set(memberVoice(m.id), label);
+    if (m.agentOf && m.address) names.set(agentVoice(m.address), label);
+  }
   return (voice: string) => SOURCE_LABEL[voice] ?? names.get(voice) ?? voice;
 }
 
@@ -80,12 +116,50 @@ const joinBody = z.object({
   signature: z.string(),
 });
 
+const agentPickBody = z.object({
+  groupId: z.string(),
+  eventId: z.string(),
+  side: z.enum(["yes", "no"]),
+  confidence: z.union([z.number(), z.string()]),
+  agent: z.string(),
+  delegationId: z.string(),
+  signedAt: z.string(),
+  signature: z.string(),
+  note: z.string().max(200).optional(),
+});
+
+const delegateBody = z.object({
+  owner: z.string(),
+  agent: z.string(),
+  agentName: z.string().trim().min(1).max(40),
+  until: z.string(),
+  at: z.string(),
+  signature: z.string(),
+});
+
+const signedBody = z.object({ at: z.string(), signature: z.string() });
+
 const pickStatus = (code: PickError["code"]) =>
   code === "not_found"
     ? 404
     : code === "signature_required" || code === "bad_signature"
       ? 401
-      : 409;
+      : code === "not_delegated"
+        ? 403
+        : 409;
+
+const agentStatus = (code: AgentError["code"]): 400 | 401 | 403 | 404 | 409 =>
+  (
+    ({
+      not_found: 404,
+      bad_request: 400,
+      bad_signature: 401,
+      not_owner: 403,
+      taken: 409,
+      revoked: 409,
+      expired: 409,
+    }) as const
+  )[code];
 
 export function createApp(deps: AppDeps) {
   const { db } = deps;
@@ -149,7 +223,7 @@ export function createApp(deps: AppDeps) {
       name: g.name,
       telegram: !!g.telegramChatId,
       createdAt: g.createdAt.toISOString(),
-      members: ms.map(memberView),
+      members: ms.map((m) => memberView(m, ms)),
     });
   });
 
@@ -201,6 +275,9 @@ export function createApp(deps: AppDeps) {
       .select()
       .from(members)
       .where(and(eq(members.groupId, g.id), eq(members.address, address)));
+    if (existing?.agentOf) {
+      return c.json({ error: "taken", message: "This address is an agent in this group." }, 409);
+    }
     if (existing) return c.json(memberView(existing));
     const [m] = await db
       .insert(members)
@@ -263,7 +340,8 @@ export function createApp(deps: AppDeps) {
             voice,
             label: label(voice),
             prob,
-            member: voice.startsWith("member:"),
+            member: voice.startsWith("member:") || voice.startsWith("agent:"),
+            agent: voice.startsWith("agent:"),
           })),
           picks: ps
             .filter((p) => p.eventId === e.id)
@@ -273,6 +351,7 @@ export function createApp(deps: AppDeps) {
               side: p.side,
               confidence: p.confidence,
               signed: !!p.signature,
+              agent: !!p.delegationId,
             })),
         };
       }),
@@ -330,18 +409,257 @@ export function createApp(deps: AppDeps) {
         createdAt: p.createdAt.toISOString(),
         anchored: !!p.anchorId,
         signed: !!p.signature,
+        agent: !!p.delegationId,
+        reason: p.delegationId ? p.note : null,
         result: e.outcome === null ? null : (e.outcome === 1) === (p.side === "yes"),
       })),
     );
   });
 
+  /** An agent's pick (ADR-0066): its own key signed the message naming the owner's delegation. */
+  app.post("/api/agent-picks", async (c) => {
+    const parsed = agentPickBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "bad_request" }, 400);
+    const body = parsed.data;
+    const address = suiAddress(body.agent);
+    const [agent] = address
+      ? await db
+          .select()
+          .from(members)
+          .where(
+            and(
+              eq(members.groupId, body.groupId),
+              eq(members.address, address),
+              isNotNull(members.agentOf),
+            ),
+          )
+      : [];
+    if (!agent) {
+      return c.json(
+        { error: "not_delegated", message: "No owner in this group has delegated this agent." },
+        403,
+      );
+    }
+    try {
+      const r = await logPick(
+        {
+          db,
+          memory: deps.memory,
+          anchorer: deps.anchorer,
+          ...(deps.log ? { log: deps.log } : {}),
+        },
+        {
+          groupId: body.groupId,
+          memberId: agent.id,
+          eventId: body.eventId,
+          side: body.side,
+          confidence: body.confidence,
+          signature: body.signature,
+          signedAt: body.signedAt,
+          delegationId: body.delegationId,
+          ...(body.note ? { note: body.note } : {}),
+          now: now(),
+        },
+      );
+      deps.log?.("agent.picked", { group: body.groupId, agent: address, pick: r.pick.id });
+      return c.json({ pick: r.pick }, 201);
+    } catch (err) {
+      if (err instanceof PickError)
+        return c.json({ error: err.code, message: err.message }, pickStatus(err.code));
+      throw err;
+    }
+  });
+
+  // ---------- agents: delegations and read-only MCP tokens (ADR-0066) ----------
+
+  const param = (c: Context, name: string) => c.req.param(name) ?? "";
+  /** An agent route: an `AgentError` becomes its status and message. */
+  const agentRoute =
+    (f: (c: Context) => Promise<Response>) =>
+    async (c: Context): Promise<Response> => {
+      try {
+        return await f(c);
+      } catch (err) {
+        if (err instanceof AgentError) {
+          return c.json({ error: err.code, message: err.message }, agentStatus(err.code));
+        }
+        throw err;
+      }
+    };
+
+  app.get("/api/groups/:id/delegations", async (c) => {
+    const groupId = c.req.param("id");
+    const ds = await db
+      .select()
+      .from(delegations)
+      .where(eq(delegations.groupId, groupId))
+      .orderBy(desc(delegations.createdAt));
+    const ms = await db.select().from(members).where(eq(members.groupId, groupId));
+    const counts = await db
+      .select({ memberId: picks.memberId, n: count() })
+      .from(picks)
+      .where(and(eq(picks.groupId, groupId), isNotNull(picks.delegationId)))
+      .groupBy(picks.memberId);
+    const s = await scores(db, groupId);
+    const t = now();
+    return c.json(
+      ds.map((d) => {
+        const owner = ms.find((m) => m.id === d.ownerMemberId);
+        const voice = agentVoice(d.agent);
+        return {
+          id: d.id,
+          agent: d.agent,
+          agentName: d.agentName,
+          agentMemberId: d.agentMemberId,
+          owner: d.owner,
+          ownerName: owner ? memberLabel(owner) : "",
+          until: d.until.toISOString(),
+          createdAt: d.createdAt.toISOString(),
+          revokedAt: d.revokedAt?.toISOString() ?? null,
+          live: !delegationProblem(d, t),
+          message: d.message,
+          picks: counts.find((x) => x.memberId === d.agentMemberId)?.n ?? 0,
+          record: s.flatMap((lg) =>
+            lg.voices
+              .filter((v) => v.voice === voice)
+              .map((v) => ({
+                league: lg.league,
+                n: v.n,
+                hits: v.hits,
+                brier: v.brier,
+                shrunk: v.shrunk,
+              })),
+          ),
+        };
+      }),
+    );
+  });
+
+  app.post(
+    "/api/groups/:id/delegations",
+    agentRoute(async (c) => {
+      const parsed = delegateBody.safeParse(await c.req.json().catch(() => null));
+      if (!parsed.success) return c.json({ error: "bad_request" }, 400);
+      const r = await delegate(db, { groupId: param(c, "id"), ...parsed.data }, now());
+      deps.log?.("agent.delegated", { group: r.delegation.groupId, agent: r.delegation.agent });
+      return c.json(
+        {
+          id: r.delegation.id,
+          agent: r.delegation.agent,
+          agentMemberId: r.agentMember.id,
+          until: r.delegation.until.toISOString(),
+        },
+        201,
+      );
+    }),
+  );
+
+  app.post(
+    "/api/groups/:id/delegations/:did/revoke",
+    agentRoute(async (c) => {
+      const parsed = signedBody.safeParse(await c.req.json().catch(() => null));
+      if (!parsed.success) return c.json({ error: "bad_request" }, 400);
+      const d = await undelegate(
+        db,
+        { groupId: param(c, "id"), delegationId: param(c, "did"), ...parsed.data },
+        now(),
+      );
+      deps.log?.("agent.revoked", { group: d.groupId, agent: d.agent });
+      return c.json({ id: d.id, revokedAt: d.revokedAt?.toISOString() });
+    }),
+  );
+
+  /** What an agent's MCP server needs to sign a pick: its newest delegation, live or not. */
+  app.get("/api/groups/:id/agents/:address", async (c) => {
+    const found = await latestDelegation(db, c.req.param("id"), c.req.param("address"));
+    if (!found)
+      return c.json({ error: "not_found", message: "This agent has no delegation here." }, 404);
+    const { delegation: d, owner } = found;
+    const problem = delegationProblem(d, now());
+    return c.json({
+      agentMemberId: d.agentMemberId,
+      name: d.agentName,
+      delegation: {
+        id: d.id,
+        owner: d.owner,
+        ownerName: owner?.name ?? "",
+        until: d.until.toISOString(),
+        live: !problem,
+        problem,
+      },
+    });
+  });
+
+  app.get("/api/groups/:id/mcp-tokens", async (c) => {
+    const rows = await db
+      .select()
+      .from(mcpTokens)
+      .where(eq(mcpTokens.groupId, c.req.param("id")))
+      .orderBy(desc(mcpTokens.createdAt));
+    return c.json(
+      rows.map((t) => ({
+        id: t.id,
+        name: t.name,
+        createdAt: t.createdAt.toISOString(),
+        expiresAt: t.expiresAt.toISOString(),
+        revokedAt: t.revokedAt?.toISOString() ?? null,
+        lastUsedAt: t.lastUsedAt?.toISOString() ?? null,
+        calls: t.calls,
+      })),
+    );
+  });
+
+  app.post(
+    "/api/groups/:id/mcp-tokens",
+    agentRoute(async (c) => {
+      const parsed = z
+        .object({
+          owner: z.string(),
+          name: z.string().trim().min(1).max(40),
+          at: z.string(),
+          signature: z.string(),
+        })
+        .safeParse(await c.req.json().catch(() => null));
+      if (!parsed.success) return c.json({ error: "bad_request" }, 400);
+      const { token, row } = await createToken(
+        db,
+        { groupId: param(c, "id"), ...parsed.data },
+        now(),
+      );
+      deps.log?.("mcp.token_created", { group: row.groupId, token: row.id });
+      // The token itself is in this response and nowhere else.
+      return c.json(
+        { id: row.id, name: row.name, token, expiresAt: row.expiresAt.toISOString() },
+        201,
+      );
+    }),
+  );
+
+  app.post(
+    "/api/groups/:id/mcp-tokens/:tid/revoke",
+    agentRoute(async (c) => {
+      const parsed = signedBody.safeParse(await c.req.json().catch(() => null));
+      if (!parsed.success) return c.json({ error: "bad_request" }, 400);
+      await revokeToken(
+        db,
+        { groupId: param(c, "id"), tokenId: param(c, "tid"), ...parsed.data },
+        now(),
+      );
+      return c.json({ id: param(c, "tid"), revoked: true });
+    }),
+  );
+
+  /** Anchors now. `?group=` limits the batch to one group's picks. */
   app.post("/api/anchor", async (c) =>
     c.json(
-      (await anchorPending({
-        db,
-        anchorer: deps.anchorer,
-        ...(deps.log ? { log: deps.log } : {}),
-      })) ?? { anchored: 0 },
+      (await anchorPending(
+        {
+          db,
+          anchorer: deps.anchorer,
+          ...(deps.log ? { log: deps.log } : {}),
+        },
+        c.req.query("group") || undefined,
+      )) ?? { anchored: 0 },
     ),
   );
 
@@ -358,10 +676,16 @@ export function createApp(deps: AppDeps) {
     const [e] = await db.select().from(events).where(eq(events.id, r.event.id));
     const [m] = await db.select().from(members).where(eq(members.id, r.pick.memberId));
     const [g] = await db.select().from(groups).where(eq(groups.id, r.pick.groupId));
+    const [owner] = m?.agentOf
+      ? await db.select().from(members).where(eq(members.id, m.agentOf))
+      : [];
+    const [row] = await db.select({ note: picks.note }).from(picks).where(eq(picks.id, r.pick.id));
     return c.json({
       receipt: r,
       group: g ? { id: g.id, name: g.name } : null,
-      member: m ? memberView(m) : null,
+      member: m ? memberView(m, owner ? [owner] : []) : null,
+      owner: owner ? memberView(owner) : null,
+      reason: r.pick.delegationId ? (row?.note ?? null) : null,
       event: e
         ? {
             id: e.id,
@@ -415,6 +739,7 @@ export function createApp(deps: AppDeps) {
 
   app.all("/api/*", (c) => c.json({ error: "not_found" }, 404));
 
+  mountMcp(app, db);
   serveWeb(app, deps.webDist);
   return app;
 }

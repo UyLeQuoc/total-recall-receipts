@@ -7,6 +7,7 @@ import { AppLayout, GroupLayout } from "./app/layout.tsx";
 import { EmptyState } from "./components/app/empty-state.tsx";
 import { Page } from "./components/app/page.tsx";
 import { Button } from "./components/ui/button.tsx";
+import { AgentsPage } from "./pages/agents.tsx";
 import { BoardPage } from "./pages/board.tsx";
 import { HomePage } from "./pages/home.tsx";
 import { LearningPage } from "./pages/learning.tsx";
@@ -36,7 +37,7 @@ function NotFound() {
 }
 
 // The same paths the bot links to (ADR-0064): /g/:id, /g/:id/scores, /g/:id/learning,
-// /g/:id/memory and /p/:pickId.
+// /g/:id/memory and /p/:pickId, plus /g/:id/agents (ADR-0066).
 createRoot(root).render(
   <StrictMode>
     <Providers>
@@ -48,6 +49,7 @@ createRoot(root).render(
               <Route index element={<BoardPage />} />
               <Route path="scores" element={<ScoresPage />} />
               <Route path="learning" element={<LearningPage />} />
+              <Route path="agents" element={<AgentsPage />} />
               <Route path="memory" element={<MemoryPage />} />
             </Route>
             <Route path="p/:pickId" element={<ReceiptPage />} />

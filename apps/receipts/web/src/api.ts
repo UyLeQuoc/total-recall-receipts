@@ -10,6 +10,8 @@ export interface Member {
   test: boolean;
   address: string | null;
   telegram: boolean;
+  /** An agent (ADR-0066): the member it picks for. */
+  agentOf?: string | null;
 }
 
 export interface GroupSummary {
@@ -36,13 +38,14 @@ export interface BoardEvent {
   yesLabel: string;
   noLabel: string;
   startsAt: string;
-  voices: { voice: string; label: string; prob: number; member: boolean }[];
+  voices: { voice: string; label: string; prob: number; member: boolean; agent?: boolean }[];
   picks: {
     id: string;
     memberId: string;
     side: "yes" | "no";
     confidence: number;
     signed: boolean;
+    agent?: boolean;
   }[];
 }
 
@@ -74,6 +77,8 @@ export interface RecentPick {
   createdAt: string;
   anchored: boolean;
   signed: boolean;
+  agent?: boolean;
+  reason?: string | null;
   result: boolean | null;
 }
 
@@ -87,6 +92,20 @@ export interface PickLeaf {
   createdAt: string;
   signer?: string;
   signature?: string;
+  /** An agent's pick (v3): the owner's delegation. */
+  delegationId?: string;
+}
+
+export interface ReceiptDelegation {
+  id: string;
+  owner: string;
+  agent: string;
+  until: string;
+  message: string;
+  signature: string;
+  revokedAt?: string;
+  revokeMessage?: string;
+  revokeSignature?: string;
 }
 
 export interface Receipt {
@@ -96,12 +115,16 @@ export interface Receipt {
   anchor: { digest: string; root: string; network: string } | null;
   event: { id: string; title: string; locksAt: string };
   signedMessage?: string;
+  delegation?: ReceiptDelegation;
 }
 
 export interface PickPage {
   receipt: Receipt;
   group: { id: string; name: string } | null;
   member: Member | null;
+  /** For an agent's pick: the member it picked for, and its one-line reason. */
+  owner?: Member | null;
+  reason?: string | null;
   event: {
     id: string;
     league: string;
@@ -162,6 +185,32 @@ export interface MemoryRow {
   blobId: string | null;
   status: string;
   createdAt: string;
+}
+
+export interface Delegation {
+  id: string;
+  agent: string;
+  agentName: string;
+  agentMemberId: string;
+  owner: string;
+  ownerName: string;
+  until: string;
+  createdAt: string;
+  revokedAt: string | null;
+  live: boolean;
+  message: string;
+  picks: number;
+  record: { league: string; n: number; hits: number; brier: number; shrunk: number }[];
+}
+
+export interface McpToken {
+  id: string;
+  name: string;
+  createdAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  lastUsedAt: string | null;
+  calls: number;
 }
 
 export interface PickResult {

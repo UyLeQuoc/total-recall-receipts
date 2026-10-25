@@ -37,6 +37,11 @@ export const members = receipts.table(
     test: boolean("test").notNull().default(false),
     /** The member's Sui wallet, when they joined from the web (ADR-0064). Their picks must be signed. */
     address: text("address"),
+    /**
+     * An agent (ADR-0066): the owner member it picks for. The agent's own key is `address`, and its
+     * picks are signed by that key under the owner's delegation.
+     */
+    agentOf: text("agent_of"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -118,6 +123,8 @@ export const picks = receipts.table(
     signer: text("signer"),
     signature: text("signature"),
     signedMessage: text("signed_message"),
+    /** An agent's pick (ADR-0066): the owner's delegation it was made under. */
+    delegationId: text("delegation_id"),
     anchorId: text("anchor_id").references(() => anchors.id),
     leafIndex: integer("leaf_index"),
   },
@@ -125,6 +132,64 @@ export const picks = receipts.table(
     uniqueIndex("picks_one_per_member").on(t.memberId, t.eventId),
     index("picks_unanchored").on(t.anchorId),
   ],
+);
+
+/**
+ * An owner's signed permission for an agent to pick for them in one group (ADR-0066). Revoking is a
+ * second signed message; both stay, so a receipt can show what was allowed when the agent picked.
+ */
+export const delegations = receipts.table(
+  "delegations",
+  {
+    id: text("id").primaryKey(),
+    groupId: text("group_id")
+      .notNull()
+      .references(() => groups.id),
+    ownerMemberId: text("owner_member_id")
+      .notNull()
+      .references(() => members.id),
+    agentMemberId: text("agent_member_id")
+      .notNull()
+      .references(() => members.id),
+    owner: text("owner").notNull(),
+    agent: text("agent").notNull(),
+    agentName: text("agent_name").notNull(),
+    until: timestamp("until", { withTimezone: true }).notNull(),
+    message: text("message").notNull(),
+    signature: text("signature").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokeMessage: text("revoke_message"),
+    revokeSignature: text("revoke_signature"),
+  },
+  (t) => [index("delegations_agent").on(t.groupId, t.agent)],
+);
+
+/**
+ * Bearer tokens for the remote, read-only MCP server (ADR-0066). Only the SHA-256 of a token is kept;
+ * the token itself is shown once.
+ */
+export const mcpTokens = receipts.table(
+  "mcp_tokens",
+  {
+    id: text("id").primaryKey(),
+    groupId: text("group_id")
+      .notNull()
+      .references(() => groups.id),
+    ownerMemberId: text("owner_member_id")
+      .notNull()
+      .references(() => members.id),
+    name: text("name").notNull(),
+    sha256: text("sha256").notNull(),
+    message: text("message").notNull(),
+    signature: text("signature").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    calls: integer("calls").notNull().default(0),
+  },
+  (t) => [uniqueIndex("mcp_tokens_sha").on(t.sha256)],
 );
 
 /** Every memory Receipts writes, so a 🧠 chip can link its blob and a test can count them. */

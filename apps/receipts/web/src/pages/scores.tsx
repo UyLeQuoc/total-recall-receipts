@@ -50,13 +50,15 @@ export function ScoresPage() {
               </TableHeader>
               <TableBody className="tabular">
                 {lg.voices.map((v, i) => {
-                  const member = v.voice.startsWith("member:");
+                  const agent = v.voice.startsWith("agent:");
+                  const member = agent || v.voice.startsWith("member:");
                   return (
                     <TableRow key={v.voice}>
                       <TableCell className="pl-4 text-muted-foreground">{i + 1}</TableCell>
                       <TableCell className={cn(member && "font-medium")}>
                         <span className="inline-flex items-center gap-2">
                           {v.label}
+                          {agent ? <StateBadge state="agent" /> : null}
                           {member ? null : <StateBadge state="source" />}
                         </span>
                       </TableCell>

@@ -6,12 +6,16 @@
  * A pick signed by the member's wallet (ADR-0064) hashes as `receipts/v2`, with the signer and the
  * signature in the leaf, so the anchor proves the signature existed before lock. Unsigned picks keep
  * v1, and every leaf already anchored still verifies.
+ *
+ * An agent's pick (ADR-0066) hashes as `receipts/v3`: the agent's key is the signer, and the leaf also
+ * carries the delegation id, so the anchor proves which permission the agent picked under.
  */
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from "@noble/hashes/utils.js";
 
 const DOMAIN_V1 = "receipts/v1";
 const DOMAIN_V2 = "receipts/v2";
+const DOMAIN_V3 = "receipts/v3";
 
 export interface PickLeaf {
   id: string;
@@ -24,16 +28,23 @@ export interface PickLeaf {
   createdAt: string;
   /** The wallet that signed the pick (v2 only). */
   signer?: string;
-  /** Its personal-message signature over the pick's message (v2 only). */
+  /** Its personal-message signature over the pick's message (v2 and v3). */
   signature?: string;
+  /** The owner's delegation an agent picked under (v3 only). */
+  delegationId?: string;
 }
 
-const signed = (p: PickLeaf) => !!(p.signer && p.signature);
+/** 1: unsigned; 2: signed by the member's wallet; 3: signed by an agent under a delegation. */
+export function leafVersion(p: PickLeaf): 1 | 2 | 3 {
+  if (!(p.signer && p.signature)) return 1;
+  return p.delegationId ? 3 : 2;
+}
 
 /** Fixed key order and fixed precision, so the same pick always hashes the same. */
 export function canonicalPick(p: PickLeaf): string {
+  const v = leafVersion(p);
   const base = {
-    v: signed(p) ? 2 : 1,
+    v,
     id: p.id,
     groupId: p.groupId,
     memberId: p.memberId,
@@ -42,11 +53,13 @@ export function canonicalPick(p: PickLeaf): string {
     confidence: p.confidence.toFixed(2),
     createdAt: new Date(p.createdAt).toISOString(),
   };
-  return JSON.stringify(signed(p) ? { ...base, signer: p.signer, signature: p.signature } : base);
+  if (v === 1) return JSON.stringify(base);
+  const signed = { ...base, signer: p.signer, signature: p.signature };
+  return JSON.stringify(v === 3 ? { ...signed, delegationId: p.delegationId } : signed);
 }
 
 export function leafHash(p: PickLeaf): string {
-  const domain = signed(p) ? DOMAIN_V2 : DOMAIN_V1;
+  const domain = [DOMAIN_V1, DOMAIN_V2, DOMAIN_V3][leafVersion(p) - 1] as string;
   return bytesToHex(sha256(concatBytes(utf8ToBytes(domain), utf8ToBytes(canonicalPick(p)))));
 }
 

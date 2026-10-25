@@ -21,6 +21,8 @@ import {
 
 export const SOURCE_VOICES = ["books", "polymarket", "kalshi"] as const;
 export const memberVoice = (id: string) => `member:${id}`;
+/** An agent is its own voice, by its key (ADR-0066), so its record follows the agent, not the group seat. */
+export const agentVoice = (address: string) => `agent:${address}`;
 /** A disagreement worth remembering: the books and a market at least this far apart. */
 export const RADAR_GAP = 0.03;
 export const INSIGHT_MIN_N = 5;
@@ -142,6 +144,14 @@ export async function marketProbs(
     .select()
     .from(picks)
     .where(and(eq(picks.groupId, groupId), inArray(picks.eventId, ids)));
+  const agents = new Map(
+    (
+      await db
+        .select({ id: members.id, address: members.address })
+        .from(members)
+        .where(and(eq(members.groupId, groupId), isNotNull(members.agentOf)))
+    ).map((a) => [a.id, agentVoice(a.address ?? a.id)]),
+  );
   const by = new Map<string, MarketProbs>(
     evs.map((e) => [
       e.id,
@@ -160,7 +170,8 @@ export async function marketProbs(
   }
   for (const p of ps) {
     const m = by.get(p.eventId);
-    if (m) m.probs[memberVoice(p.memberId)] = pickProb(p.side as Side, p.confidence);
+    const voice = agents.get(p.memberId) ?? memberVoice(p.memberId);
+    if (m) m.probs[voice] = pickProb(p.side as Side, p.confidence);
   }
   return [...by.values()];
 }

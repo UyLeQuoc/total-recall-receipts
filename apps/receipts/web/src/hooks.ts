@@ -4,10 +4,12 @@ import {
   api,
   type BoardEvent,
   type Call,
+  type Delegation,
   type Group,
   type GroupSummary,
   type LeagueLearning,
   type LeagueScores,
+  type McpToken,
   type MemoryRow,
   type PickPage,
   type RecentPick,
@@ -20,7 +22,21 @@ export const keys = {
   group: (id: string) => ["group", id],
   board: (id: string) => ["board", id],
   picks: (id: string) => ["picks", id],
+  delegations: (id: string) => ["delegations", id],
+  tokens: (id: string) => ["mcp-tokens", id],
 };
+
+export const useDelegations = (id: string) =>
+  useQuery({
+    queryKey: keys.delegations(id),
+    queryFn: () => api<Delegation[]>(`/api/groups/${id}/delegations`),
+  });
+
+export const useTokens = (id: string) =>
+  useQuery({
+    queryKey: keys.tokens(id),
+    queryFn: () => api<McpToken[]>(`/api/groups/${id}/mcp-tokens`),
+  });
 
 export const useGroups = () =>
   useQuery({ queryKey: keys.groups, queryFn: () => api<GroupSummary[]>("/api/groups") });
@@ -78,9 +94,9 @@ export const useVerify = (id: string) =>
     staleTime: 30_000,
   });
 
-/** The connected wallet's member in this group, if it has joined. */
+/** The connected wallet's member in this group, if it has joined (agents are not "me"). */
 export function useMe(group: Group | undefined) {
   const account = useCurrentAccount();
-  const me = group?.members.find((m) => sameAddress(m.address, account?.address));
+  const me = group?.members.find((m) => !m.agentOf && sameAddress(m.address, account?.address));
   return { account, me };
 }

@@ -5,7 +5,7 @@
  */
 
 import { cn } from "cn";
-import { Brain, ChartLine, Layers, Ticket, Trophy } from "lucide-react";
+import { Bot, Brain, ChartLine, Layers, Ticket, Trophy } from "lucide-react";
 import {
   type CSSProperties,
   createContext,
@@ -58,6 +58,7 @@ export const GROUP_PAGES = [
   { to: "", label: "Board", icon: Ticket, end: true },
   { to: "scores", label: "Leaderboard", icon: Trophy },
   { to: "learning", label: "Learning", icon: ChartLine },
+  { to: "agents", label: "Agents", icon: Bot },
   { to: "memory", label: "Memory", icon: Brain },
 ] as const;
 
