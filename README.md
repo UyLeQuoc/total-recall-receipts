@@ -22,9 +22,10 @@ cp .env.example .env              # fill in the Walrus Memory, Tatum and sponsor
 docker compose up -d              # Postgres on localhost:5435
 npx -y bun@1.3.14 install
 bun run db:push                   # the app's own `receipts` schema
-bun run dev                       # the API on http://localhost:8811
-bun run dev:web                   # the web on http://localhost:5181 (/api → 8811)
+bun run dev                       # the API on :8811 and the web on :5181 (/api → 8811), in Turborepo's TUI
 ```
+In the TUI, `↑`/`↓` or `j`/`k` switch between the API and the web, `u`/`d` scroll the logs, `m` lists the keys
+and `Ctrl+C` stops both ([ADR-0069](docs/adr/0069-turbo-tui-for-dev.md)). `bun run dev:web` still runs the web alone.
 `bun run build` writes `apps/receipts/web/dist`, and the API then serves the web itself on 8811.
 The app README has the worker, the bot and the end-to-end run.
 

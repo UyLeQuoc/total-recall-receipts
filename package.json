@@ -7,7 +7,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "bun run --filter @receipts/app dev",
+    "dev": "turbo run dev dev:web --ui=tui --env-mode=loose",
     "dev:web": "bun run --filter @receipts/app dev:web",
     "typecheck": "turbo run typecheck",
     "build": "turbo run build",
