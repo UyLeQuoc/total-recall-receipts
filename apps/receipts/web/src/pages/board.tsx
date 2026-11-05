@@ -1,41 +1,74 @@
 import { useSignPersonalMessage } from "@mysten/dapp-kit";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "cn";
-import { ArrowRight, Bot, CalendarClock, CircleCheck, Clock, Wallet } from "lucide-react";
-import { useState } from "react";
+import { Bot, CalendarClock, Check, CircleCheck, Clock, Wallet } from "lucide-react";
+import { Fragment, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { EmptyState } from "@/components/app/empty-state";
 import { Section } from "@/components/app/page";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { api, type BoardEvent, type Group, type Member, type PickResult } from "../api.ts";
 import { BrainChip, ErrorNote, Spinner, StateBadge, Tag } from "../components/receipts.tsx";
 import { WalletButton } from "../components/wallet.tsx";
-import { pct, short, until, when } from "../format.ts";
+import { clock, dayLabel, pct, short, until, urgent } from "../format.ts";
 import { keys, useBoard, useCall, useGroup, useMe, usePicks } from "../hooks.ts";
 import { joinMessage, pickMessage } from "../messages.ts";
 
 const utf8 = (s: string) => new TextEncoder().encode(s);
+
+const SOURCES = ["books", "polymarket", "kalshi"] as const;
+
+const SOURCE_NAME = { books: "Books", polymarket: "Polymarket", kalshi: "Kalshi" } as const;
+
+/** The market list's one grid: game, lock, the three books, Receipts, action. */
+const ROW =
+  "md:grid md:grid-cols-[minmax(0,1fr)_5rem_3.25rem_4.25rem_3.25rem_3.5rem_5.5rem] md:items-center md:gap-x-2";
+
+const sourceValue = (event: BoardEvent, key: (typeof SOURCES)[number]) =>
+  event.voices.find((v) => v.voice === key)?.prob ?? null;
+
+const sourceLabel = (event: BoardEvent, key: (typeof SOURCES)[number]) =>
+  (event.voices.find((v) => v.voice === key)?.label ?? SOURCE_NAME[key]).replace(/\s*\(.*\)$/, "");
 
 export function BoardPage() {
   const { id = "" } = useParams();
   const group = useGroup(id);
   const board = useBoard(id);
   const { me } = useMe(group.data);
+  const [open, setOpen] = useState<string | null>(null);
 
   if (group.isError) return <ErrorNote error={group.error} />;
+
+  const events = [...(board.data ?? [])].sort(
+    (a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt),
+  );
+  const picked = (e: BoardEvent) => (me ? e.picks.some((p) => p.memberId === me.id) : false);
+  const hero = events.find((e) => !picked(e)) ?? null;
+  const rest = hero ? events.filter((e) => e.id !== hero.id) : events;
+  const days = rest.reduce<{ day: string; events: BoardEvent[] }[]>((out, e) => {
+    const day = dayLabel(e.startsAt);
+    const last = out.at(-1);
+    if (last?.day === day) last.events.push(e);
+    else out.push({ day, events: [e] });
+    return out;
+  }, []);
+
   return (
     <>
       {group.data ? <Members group={group.data} me={me} /> : <Spinner />}
       {group.data ? <JoinPanel group={group.data} me={me} /> : null}
 
-      <Section
-        title="Open markets"
-        actions={<span className="text-xs text-muted-foreground">P(yes) from every voice</span>}
-      >
-        {board.isPending ? <Spinner label="Loading the board…" /> : null}
-        <ErrorNote error={board.error} />
+      {board.isPending ? <Spinner label="Loading the board…" /> : null}
+      <ErrorNote error={board.error} />
+
+      {hero ? <NextToLock event={hero} groupId={id} me={me} /> : null}
+
+      <section className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-sm font-semibold">Open markets</h2>
+          <span className="text-xs text-muted-foreground">Chance of yes</span>
+        </div>
         {board.data && !board.data.length ? (
           <EmptyState
             icon={<CalendarClock />}
@@ -43,12 +76,43 @@ export function BoardPage() {
             description="The worker loads NBA, EPL and the midterms as their lines come out."
           />
         ) : null}
-        <div className="grid gap-4 xl:grid-cols-2">
-          {board.data?.map((e) => (
-            <MarketCard key={e.id} event={e} groupId={id} me={me} />
-          ))}
-        </div>
-      </Section>
+        {days.length ? (
+          <div className="overflow-hidden rounded-lg border bg-card">
+            <div
+              className={cn(
+                "hidden border-b px-3 py-1.5 text-xs text-muted-foreground",
+                ROW,
+                "md:grid",
+              )}
+            >
+              <span className="truncate">Game</span>
+              <span className="text-right">Locks</span>
+              <span className="text-right">Books</span>
+              <span className="text-right">Polymarket</span>
+              <span className="text-right">Kalshi</span>
+              <span className="text-right">Receipts</span>
+              <span />
+            </div>
+            <div className="divide-y">
+              {days.map((d) => (
+                <Fragment key={`${d.day}-${d.events[0]?.id}`}>
+                  <p className="bg-muted/40 px-3 py-1 text-xs text-muted-foreground">{d.day}</p>
+                  {d.events.map((e) => (
+                    <MarketRow
+                      key={e.id}
+                      event={e}
+                      groupId={id}
+                      me={me}
+                      open={open === e.id}
+                      onToggle={() => setOpen(open === e.id ? null : e.id)}
+                    />
+                  ))}
+                </Fragment>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </section>
 
       <RecentPicks groupId={id} />
     </>
@@ -56,34 +120,34 @@ export function BoardPage() {
 }
 
 function Members({ group, me }: { group: Group; me: Member | undefined }) {
-  if (!group.members.length) {
-    return <p className="text-sm text-muted-foreground">No members yet. Be the first to join.</p>;
-  }
+  if (!group.members.length) return null;
   return (
-    <ul className="flex flex-wrap gap-2" aria-label="Members">
-      {group.members.map((m) => (
-        <li
-          key={m.id}
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-1 text-xs",
-            m.id === me?.id && "border-primary/50 bg-primary/5 font-medium",
-            m.agentOf && "border-primary/30 bg-accent/50",
-          )}
-        >
-          {m.agentOf ? <Bot className="size-3.5 text-primary" aria-label="Agent" /> : null}
-          {m.label}
-          {m.address ? (
-            <span className="font-mono text-muted-foreground" title={m.address}>
-              {short(m.address)}
-            </span>
-          ) : m.telegram ? (
-            <span className="text-muted-foreground">Telegram</span>
-          ) : (
-            <span className="text-muted-foreground">no wallet</span>
-          )}
-        </li>
-      ))}
-    </ul>
+    <details className="text-xs text-muted-foreground">
+      <summary className="w-fit cursor-pointer">Members</summary>
+      <ul className="mt-1.5 flex flex-wrap gap-1.5" aria-label="Members">
+        {group.members.map((m) => (
+          <li
+            key={m.id}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full border px-2 py-0.5",
+              m.id === me?.id && "border-primary/50 font-medium text-foreground",
+            )}
+          >
+            {m.agentOf ? <Bot className="size-3 shrink-0" aria-label="Agent" /> : null}
+            {m.label}
+            {m.address ? (
+              <span className="font-mono text-muted-foreground" title={m.address}>
+                {short(m.address)}
+              </span>
+            ) : m.telegram ? (
+              <span className="text-muted-foreground">Telegram</span>
+            ) : (
+              <span className="text-muted-foreground">no wallet</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 
@@ -119,151 +183,81 @@ function JoinPanel({ group, me }: { group: Group; me: Member | undefined }) {
 
   if (me) {
     return (
-      <p className="flex items-start gap-2 text-sm text-muted-foreground">
-        <CircleCheck className="mt-0.5 size-4 shrink-0 text-success" aria-hidden />
+      <p className="flex items-start gap-2 text-xs text-muted-foreground">
+        <CircleCheck className="mt-0.5 size-3.5 shrink-0 text-success" aria-hidden />
         <span>
-          You're in as <strong className="font-medium text-foreground">{me.label}</strong>. Your
-          picks are signed by <span className="font-mono">{short(me.address ?? "")}</span>.
+          You're in as <strong className="font-medium text-foreground">{me.label}</strong>.
         </span>
       </p>
     );
   }
-  return (
-    <Card className="gap-3 px-5">
-      {!account ? (
-        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex gap-3">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Wallet className="size-4" />
-            </span>
-            <div>
-              <p className="font-medium">Join with your wallet</p>
-              <p className="text-sm text-muted-foreground">
-                Your wallet signs your picks. Nothing is paid and nothing leaves your wallet.
-              </p>
-            </div>
-          </div>
-          <WalletButton />
-        </div>
-      ) : (
-        <form
-          className="flex flex-col gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (name.trim()) join.mutate();
-          }}
-        >
-          <div>
-            <p className="font-medium">Join {group.name}</p>
-            <p className="text-sm text-muted-foreground">
-              Signing a message adds <span className="font-mono">{short(account.address)}</span> to
-              the group. It costs nothing.
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <label className="sr-only" htmlFor="member-name">
-              Your name in the group
-            </label>
-            <Input
-              id="member-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={60}
-              placeholder="Your name in the group"
-              className="flex-1"
-            />
-            <Button type="submit" disabled={!name.trim() || join.isPending}>
-              {join.isPending ? "Waiting for your wallet…" : "Sign and join"}
-            </Button>
-          </div>
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              className="size-4"
-              checked={test}
-              onChange={(e) => setTest(e.target.checked)}
-            />
-            I'm only testing: label me "(test)"
-          </label>
-          <ErrorNote error={join.error} />
-        </form>
-      )}
-    </Card>
-  );
-}
-
-function VoiceBar({
-  label,
-  prob,
-  member,
-  agent,
-}: {
-  label: string;
-  prob: number;
-  member: boolean;
-  agent?: boolean;
-}) {
-  return (
-    <div className="grid grid-cols-[minmax(0,1fr)_3rem] items-center gap-x-3 text-sm">
-      <div className="min-w-0">
-        <span
-          className={cn(
-            "flex items-center gap-1.5 truncate",
-            member ? "font-medium" : "text-muted-foreground",
-          )}
-        >
-          {agent ? <Bot className="size-3.5 shrink-0 text-primary" aria-label="Agent" /> : null}
-          <span className="truncate">{label}</span>
-        </span>
-        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
-          <div
-            className={cn("h-full rounded-full", member ? "bg-primary" : "bg-foreground/35")}
-            style={{ width: `${Math.round(prob * 100)}%` }}
-          />
-        </div>
-      </div>
-      <span className="tabular text-right font-medium">{pct(prob)}</span>
-    </div>
-  );
-}
-
-function ReceiptsCall({ groupId, event }: { groupId: string; event: BoardEvent }) {
-  const call = useCall(groupId, event.id);
-  if (call.isPending) return <Spinner label="Receipts is recalling what it learned…" />;
-  if (call.isError || !call.data) {
+  if (!account) {
     return (
-      <p className="text-xs text-muted-foreground">
-        Receipts' call needs Walrus Memory, and it didn't answer just now.
-      </p>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <Wallet className="size-4 shrink-0 text-primary" aria-hidden />
+        <span className="font-medium">Join with your wallet</span>
+        <span className="text-xs text-muted-foreground">Signing costs nothing.</span>
+        <WalletButton />
+      </div>
     );
   }
-  const c = call.data;
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-primary/20 bg-accent/60 p-3">
-      {c.prob !== null ? (
-        <p className="text-sm">
-          <span className="font-medium">
-            Receipts: {pct(c.prob)} {event.yesLabel}
-          </span>
-          {c.average !== null ? (
-            <span className="text-muted-foreground"> · plain average {pct(c.average)}</span>
-          ) : null}
-        </p>
-      ) : (
-        <p className="text-sm text-muted-foreground">No numbers yet for Receipts to weigh.</p>
-      )}
-      {c.chips.length ? (
-        <div className="flex flex-wrap gap-1.5">
-          {c.chips.map((ch) => (
-            <BrainChip key={ch.text} chip={ch} groupId={groupId} />
-          ))}
-        </div>
-      ) : null}
-    </div>
+    <form
+      className="flex flex-col gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (name.trim()) join.mutate();
+      }}
+    >
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <label className="sr-only" htmlFor="member-name">
+          Your name in the group
+        </label>
+        <Input
+          id="member-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={60}
+          placeholder="Your name in the group"
+          className="flex-1"
+        />
+        <Button type="submit" disabled={!name.trim() || join.isPending}>
+          {join.isPending ? "Waiting for your wallet…" : "Sign and join"}
+        </Button>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          <input
+            type="checkbox"
+            className="size-4"
+            checked={test}
+            onChange={(e) => setTest(e.target.checked)}
+          />
+          I'm only testing: label me "(test)"
+        </label>
+        <p className="text-xs text-muted-foreground">Signing costs nothing.</p>
+      </div>
+      <ErrorNote error={join.error} />
+    </form>
   );
 }
 
-function MarketCard({
+function Countdown({ startsAt }: { startsAt: string }) {
+  return (
+    <span
+      className={cn(
+        "tabular inline-flex items-center gap-1 whitespace-nowrap text-xs",
+        urgent(startsAt) ? "text-warning-foreground" : "text-muted-foreground",
+      )}
+    >
+      <Clock className="size-3" aria-hidden />
+      {until(startsAt)}
+    </span>
+  );
+}
+
+/** The biggest thing on the page: the market that locks first, and Receipts' call on it. */
+function NextToLock({
   event,
   groupId,
   me,
@@ -272,68 +266,268 @@ function MarketCard({
   groupId: string;
   me: Member | undefined;
 }) {
-  const mine = me ? event.picks.find((p) => p.memberId === me.id) : undefined;
-  const sources = event.voices.filter((v) => !v.member);
-  const people = event.voices.filter((v) => v.member);
+  const call = useCall(groupId, event.id);
+  const prob = call.data?.prob ?? null;
+  const answered = !call.isError && prob !== null;
+
+  const numbers = (
+    <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
+      {SOURCES.map((k) => {
+        const value = sourceValue(event, k);
+        return (
+          <div key={k}>
+            <p className="text-xs text-muted-foreground">{sourceLabel(event, k)}</p>
+            <p className={cn("text-xl tabular", value === null && "text-muted-foreground")}>
+              {value === null ? "—" : pct(value)}
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const callNote = call.isPending ? (
+    <Spinner label="Receipts is recalling what it learned…" />
+  ) : (
+    <p className="text-xs text-muted-foreground">
+      {call.isError
+        ? "Receipts' call needs Walrus Memory, which didn't answer."
+        : "No numbers yet for Receipts to weigh."}
+    </p>
+  );
+
   return (
-    <Card
-      className="gap-4 px-5"
+    <section
+      className="rounded-lg border bg-card p-4"
       data-testid="market"
       data-event={event.id}
       data-league={event.league}
       data-starts={event.startsAt}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="font-medium leading-snug">{event.title}</p>
-          <p className="text-xs text-muted-foreground">
-            Yes = {event.yesLabel} · locks {when(event.startsAt)}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          <Tag>{event.league}</Tag>
-          <span className="tabular inline-flex items-center gap-1 text-xs text-warning-foreground">
-            <Clock className="size-3" aria-hidden />
-            {until(event.startsAt)}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            Next to lock
           </span>
+          <Tag>{event.league}</Tag>
         </div>
+        <Countdown startsAt={event.startsAt} />
       </div>
-      <div className="flex flex-col gap-2.5">
-        {sources.length ? (
-          sources.map((v) => <VoiceBar key={v.voice} {...v} />)
+      <p className="mt-1 text-xl font-semibold">{event.title}</p>
+      <p className="text-xs text-muted-foreground">Yes = {event.yesLabel}</p>
+
+      <div className="mt-3 flex flex-col gap-2">
+        {answered ? (
+          <>
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground">Receipts</p>
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <p className="text-4xl font-semibold tabular text-primary">{pct(prob)}</p>
+                <span className="text-sm font-medium">{event.yesLabel}</span>
+                {call.data && call.data.average !== null ? (
+                  <span className="text-sm text-muted-foreground">
+                    plain average {pct(call.data.average)}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            {call.data?.chips.length ? (
+              <div className="flex flex-wrap gap-1">
+                {call.data.chips.map((ch) => (
+                  <BrainChip key={ch.text} chip={ch} groupId={groupId} />
+                ))}
+              </div>
+            ) : null}
+            {numbers}
+          </>
         ) : (
-          <p className="text-xs text-muted-foreground">No book or market line yet.</p>
+          <>
+            {numbers}
+            {callNote}
+            {call.data?.chips.length ? (
+              <div className="flex flex-wrap gap-1">
+                {call.data.chips.map((ch) => (
+                  <BrainChip key={ch.text} chip={ch} groupId={groupId} />
+                ))}
+              </div>
+            ) : null}
+          </>
         )}
-        {people.length ? (
-          <div className="flex flex-col gap-2.5 border-t border-dashed pt-2.5">
-            {people.map((v) => (
-              <VoiceBar key={v.voice} {...v} />
-            ))}
+        <Voices voices={event.voices} />
+      </div>
+
+      {me && !event.picks.some((p) => p.memberId === me.id) ? (
+        <div className="mt-3">
+          <PickForm event={event} groupId={groupId} me={me} />
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function NumberCell({
+  label,
+  value,
+  strong,
+}: {
+  label: string;
+  value: number | null;
+  strong?: boolean;
+}) {
+  return (
+    <div className="min-w-0 md:text-right">
+      <span className="block text-xs text-muted-foreground md:hidden">{label}</span>
+      <span
+        className={cn(
+          "tabular text-sm",
+          value === null
+            ? "text-muted-foreground"
+            : strong
+              ? "font-semibold text-primary"
+              : undefined,
+        )}
+      >
+        {value === null ? "—" : pct(value)}
+      </span>
+    </div>
+  );
+}
+
+function Voices({ voices }: { voices: BoardEvent["voices"] }) {
+  const people = voices.filter((v) => v.member);
+  if (!people.length) return null;
+  return (
+    <ul className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      {people.map((v) => (
+        <li key={v.voice} className="inline-flex min-w-0 items-center gap-1">
+          {v.agent ? <Bot className="size-3 shrink-0" aria-label="Agent" /> : null}
+          <span className="truncate">{v.label}</span>
+          <span className="tabular">{pct(v.prob)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function MarketRow({
+  event,
+  groupId,
+  me,
+  open,
+  onToggle,
+}: {
+  event: BoardEvent;
+  groupId: string;
+  me: Member | undefined;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const mine = me ? event.picks.find((p) => p.memberId === me.id) : undefined;
+  const canPick = !!me && !mine;
+  const call = useCall(groupId, event.id);
+  const receipts = call.isError ? null : (call.data?.prob ?? null);
+
+  return (
+    <div
+      data-testid="market"
+      data-event={event.id}
+      data-league={event.league}
+      data-starts={event.startsAt}
+      className="px-3 py-2"
+    >
+      <div className={cn("flex flex-col gap-1.5", ROW)}>
+        <div className="flex items-start gap-2 md:contents">
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-medium leading-snug">{event.title}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              Yes = {event.yesLabel} · {event.league}
+              <span
+                className={cn(
+                  "tabular md:hidden",
+                  urgent(event.startsAt) && "text-warning-foreground",
+                )}
+              >
+                {" · "}
+                {until(event.startsAt)}
+              </span>
+            </p>
           </div>
+
+          <div className="flex shrink-0 flex-col items-end gap-0.5 md:order-last">
+            {mine ? (
+              <Link
+                to={`/p/${mine.id}`}
+                className="tabular hidden text-xs hover:underline md:block md:text-right"
+              >
+                Your pick: {mine.side === "yes" ? event.yesLabel : event.noLabel} at{" "}
+                {pct(mine.confidence)}
+              </Link>
+            ) : null}
+            {mine || !canPick ? (
+              <Button variant="ghost" size="sm" aria-expanded={open} onClick={onToggle}>
+                Details
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" aria-expanded={open} onClick={onToggle}>
+                Pick
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="hidden flex-col items-end text-xs md:flex">
+          <span className="tabular text-muted-foreground">{clock(event.startsAt)}</span>
+          <Countdown startsAt={event.startsAt} />
+        </div>
+
+        <div className="grid grid-cols-4 gap-2 md:contents">
+          {SOURCES.map((k) => (
+            <NumberCell key={k} label={sourceLabel(event, k)} value={sourceValue(event, k)} />
+          ))}
+          <NumberCell label="Receipts" value={receipts} strong />
+        </div>
+
+        {mine ? (
+          <Link to={`/p/${mine.id}`} className="tabular text-xs hover:underline md:hidden">
+            Your pick: {mine.side === "yes" ? event.yesLabel : event.noLabel} at{" "}
+            {pct(mine.confidence)}
+          </Link>
         ) : null}
       </div>
-      <ReceiptsCall groupId={groupId} event={event} />
-      {mine ? (
-        <Link
-          to={`/p/${mine.id}`}
-          className="flex items-center justify-between gap-2 rounded-lg bg-success/15 px-3 py-2 text-sm text-success-foreground transition-colors hover:bg-success/25"
-        >
-          <span>
-            Your pick:{" "}
-            <strong className="font-medium">
-              {mine.side === "yes" ? event.yesLabel : event.noLabel}
-            </strong>{" "}
-            at {pct(mine.confidence)}
-          </span>
-          <span className="inline-flex shrink-0 items-center gap-1 font-medium">
-            {mine.signed ? "Signed · receipt" : "Receipt"}
-            <ArrowRight className="size-3.5" aria-hidden />
-          </span>
-        </Link>
-      ) : me ? (
-        <PickForm event={event} groupId={groupId} me={me} />
+
+      {open ? (
+        <div className="mt-2 flex flex-col gap-2 border-t pt-2">
+          <RowDetail groupId={groupId} event={event} />
+          <Voices voices={event.voices} />
+          {canPick && me ? <PickForm event={event} groupId={groupId} me={me} /> : null}
+        </div>
       ) : null}
-    </Card>
+    </div>
+  );
+}
+
+/** What a collapsed row leaves out: the 🧠 chips, or the one note that there are none. */
+function RowDetail({ groupId, event }: { groupId: string; event: BoardEvent }) {
+  const call = useCall(groupId, event.id);
+  if (call.isPending) return <Spinner label="Receipts is recalling what it learned…" />;
+  if (call.isError) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Receipts' call needs Walrus Memory, which didn't answer.
+      </p>
+    );
+  }
+  if (!call.data?.chips.length) {
+    return call.data?.prob === null ? (
+      <p className="text-xs text-muted-foreground">No numbers yet for Receipts to weigh.</p>
+    ) : null;
+  }
+  return (
+    <div className="flex flex-wrap gap-1">
+      {call.data.chips.map((ch) => (
+        <BrainChip key={ch.text} chip={ch} groupId={groupId} />
+      ))}
+    </div>
   );
 }
 
@@ -372,44 +566,53 @@ function PickForm({ event, groupId, me }: { event: BoardEvent; groupId: string; 
 
   return (
     <form
-      className="flex flex-col gap-3 rounded-lg border bg-background p-3"
+      className="flex flex-col gap-2 border-t pt-2"
       onSubmit={(e) => {
         e.preventDefault();
         pick.mutate();
       }}
     >
-      <fieldset className="grid grid-cols-2 gap-2">
-        <legend className="sr-only">Your side</legend>
-        {(["yes", "no"] as const).map((s) => (
-          <Button
-            key={s}
-            type="button"
-            variant={side === s ? "default" : "outline"}
-            aria-pressed={side === s}
-            onClick={() => setSide(s)}
-            className="h-auto min-h-9 whitespace-normal py-1.5"
-          >
-            {s === "yes" ? event.yesLabel : event.noLabel}
-          </Button>
-        ))}
-      </fieldset>
-      <label className="flex items-center gap-3 text-sm">
-        <span className="shrink-0 text-muted-foreground">How sure?</span>
-        <input
-          type="range"
-          min={50}
-          max={99}
-          value={confidence}
-          onChange={(e) => setConfidence(Number(e.target.value))}
-          className="min-w-0 flex-1"
-          aria-label="Confidence"
-        />
-        <span className="tabular w-10 text-right font-medium">{confidence}%</span>
-      </label>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <fieldset className="grid grid-cols-2 gap-1.5 sm:flex sm:shrink-0">
+          <legend className="sr-only">Your side</legend>
+          {(["yes", "no"] as const).map((s) => (
+            <Button
+              key={s}
+              type="button"
+              size="sm"
+              variant="outline"
+              aria-pressed={side === s}
+              onClick={() => setSide(s)}
+              className={cn(
+                "h-auto min-h-8 whitespace-normal py-1",
+                side === s &&
+                  "border-primary! bg-primary/10! text-primary hover:bg-primary/15! hover:text-primary",
+              )}
+            >
+              {side === s ? <Check aria-hidden /> : null}
+              {s === "yes" ? event.yesLabel : event.noLabel}
+            </Button>
+          ))}
+        </fieldset>
+        <label className="flex min-w-0 flex-1 items-center gap-2 text-sm">
+          <span className="shrink-0 text-muted-foreground">How sure?</span>
+          <input
+            type="range"
+            min={50}
+            max={99}
+            value={confidence}
+            onChange={(e) => setConfidence(Number(e.target.value))}
+            className="min-w-0 flex-1"
+            aria-label="Confidence"
+          />
+          <span className="tabular w-9 shrink-0 text-right font-medium">{confidence}%</span>
+        </label>
+      </div>
       <Button
         type="submit"
+        size="sm"
         disabled={pick.isPending}
-        className="h-auto min-h-9 whitespace-normal py-2"
+        className="h-auto min-h-8 whitespace-normal py-1.5"
       >
         {pick.isPending
           ? "Waiting for your wallet…"
@@ -425,12 +628,12 @@ function RecentPicks({ groupId }: { groupId: string }) {
   if (!picks.data?.length) return null;
   return (
     <Section title="Recent picks">
-      <div className="divide-y overflow-hidden rounded-xl border bg-card">
+      <div className="divide-y overflow-hidden rounded-lg border bg-card">
         {picks.data.map((p) => (
           <Link
             key={p.id}
             to={`/p/${p.id}`}
-            className="flex flex-col gap-1.5 px-4 py-3 transition-colors hover:bg-accent/40 sm:flex-row sm:items-center sm:justify-between"
+            className="flex flex-col gap-1 px-3 py-2 transition-colors hover:bg-accent/40 sm:flex-row sm:items-center sm:justify-between"
           >
             <div className="min-w-0">
               <p className="truncate text-sm">

@@ -5,14 +5,14 @@
  */
 import { useSignPersonalMessage } from "@mysten/dapp-kit";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { cn } from "cn";
 import { Bot, Check, Copy, KeyRound, Plug, ShieldOff } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { EmptyState } from "@/components/app/empty-state";
 import { Section } from "@/components/app/page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { api, type Delegation, type Group, type McpToken, type Member } from "../api.ts";
 import { ErrorNote, Spinner, Tag } from "../components/receipts.tsx";
@@ -40,33 +40,23 @@ export function AgentsPage() {
   return (
     <>
       <p className="max-w-3xl text-sm text-muted-foreground">
-        Let an AI agent pick for you. Your wallet signs a delegation; the agent signs every pick
-        with its own key, and each pick is anchored on Sui before lock like anyone's. Its record
-        sits on the leaderboard as the agent's, so you learn whether to trust it. Revoke it any
-        time.
+        An agent picks for you with its own key, and its record counts on the leaderboard like
+        anyone's.
       </p>
 
       {!account ? (
-        <Card className="flex-col items-start gap-3 px-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="font-medium">Connect the wallet you joined with</p>
-            <p className="text-sm text-muted-foreground">
-              Only a member can delegate an agent, and only with a signature. Nothing is paid.
-            </p>
-          </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <span className="font-medium">Connect the wallet you joined with</span>
           <WalletButton />
-        </Card>
+        </div>
       ) : !me ? (
-        <Card className="gap-2 px-5">
-          <p className="font-medium">Join the group first</p>
-          <p className="text-sm text-muted-foreground">
-            This wallet isn't a member yet.{" "}
-            <Link className="underline underline-offset-2" to={`/g/${id}`}>
-              Join on the board
-            </Link>
-            , then come back to name your agent.
-          </p>
-        </Card>
+        <p className="text-sm text-muted-foreground">
+          This wallet isn't a member yet.{" "}
+          <Link className="underline underline-offset-2" to={`/g/${id}`}>
+            Join on the board
+          </Link>
+          , then come back to name your agent.
+        </p>
       ) : (
         <DelegateForm group={group.data} me={me} />
       )}
@@ -81,16 +71,21 @@ export function AgentsPage() {
             description="Delegate one above, then connect it through MCP below."
           />
         ) : null}
-        <div className="grid gap-4 xl:grid-cols-2" data-testid="delegations">
-          {delegations.data?.map((d) => (
-            <DelegationCard
-              key={d.id}
-              d={d}
-              group={group.data}
-              mine={!!account && sameAddress(d.owner, account.address)}
-            />
-          ))}
-        </div>
+        {delegations.data?.length ? (
+          <div
+            className="divide-y overflow-hidden rounded-lg border bg-card"
+            data-testid="delegations"
+          >
+            {delegations.data.map((d) => (
+              <DelegationRow
+                key={d.id}
+                d={d}
+                group={group.data}
+                mine={!!account && sameAddress(d.owner, account.address)}
+              />
+            ))}
+          </div>
+        ) : null}
       </Section>
 
       <Connect group={group.data} me={me} />
@@ -138,78 +133,78 @@ function DelegateForm({ group, me }: { group: Group; me: Member }) {
   });
   const ready = /^0x[0-9a-fA-F]{1,64}$/.test(agent.trim()) && name.trim().length > 0;
   return (
-    <Card className="gap-4 px-5">
-      <div className="flex gap-3">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <Bot className="size-4" />
+    <div className="flex flex-col gap-2">
+      <p className="text-sm">
+        <span className="font-medium">Delegate an agent</span>{" "}
+        <span className="text-muted-foreground">
+          It picks for <strong className="font-medium text-foreground">{me.label}</strong>.
         </span>
-        <div>
-          <p className="font-medium">Delegate an agent</p>
-          <p className="text-sm text-muted-foreground">
-            The agent picks for <strong className="font-medium text-foreground">{me.label}</strong>{" "}
-            with its own key. It can't change your picks, and it costs nothing.
-          </p>
-        </div>
-      </div>
+      </p>
       <form
-        className="grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"
+        className="flex flex-col gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           if (ready) go.mutate();
         }}
       >
-        <div className="flex flex-col gap-1.5 text-sm">
-          <label htmlFor="agent-address" className="text-muted-foreground">
-            The agent's Sui address
-          </label>
-          <Input
-            id="agent-address"
-            value={agent}
-            onChange={(e) => setAgent(e.target.value)}
-            placeholder="0x…"
-            className="font-mono"
-          />
+        <div className="grid gap-2 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:items-end">
+          <div className="flex flex-col gap-1 text-sm">
+            <label htmlFor="agent-address" className="text-muted-foreground">
+              The agent's Sui address
+            </label>
+            <Input
+              id="agent-address"
+              value={agent}
+              onChange={(e) => setAgent(e.target.value)}
+              placeholder="0x…"
+              className="font-mono"
+            />
+          </div>
+          <div className="flex flex-col gap-1 text-sm">
+            <label htmlFor="agent-name" className="text-muted-foreground">
+              Its name
+            </label>
+            <Input
+              id="agent-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={40}
+              placeholder="Forecaster"
+            />
+          </div>
         </div>
-        <div className="flex flex-col gap-1.5 text-sm">
-          <label htmlFor="agent-name" className="text-muted-foreground">
-            Its name
-          </label>
-          <Input
-            id="agent-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={40}
-            placeholder="Forecaster"
-          />
-        </div>
-        <fieldset className="flex flex-wrap items-center gap-2 text-sm sm:col-span-2">
-          <legend className="sr-only">How long</legend>
-          <span className="text-muted-foreground">For</span>
-          {DAYS.map((d) => (
-            <Button
-              key={d}
-              type="button"
-              size="sm"
-              variant={days === d ? "default" : "outline"}
-              aria-pressed={days === d}
-              onClick={() => setDays(d)}
-            >
-              {d === 1 ? "1 day" : `${d} days`}
-            </Button>
-          ))}
-        </fieldset>
-        <div className="sm:col-span-2">
-          <Button type="submit" disabled={!ready || go.isPending}>
+        <div className="flex flex-wrap items-center gap-2">
+          <fieldset className="flex flex-wrap items-center gap-1.5 text-sm">
+            <legend className="sr-only">How long</legend>
+            <span className="text-muted-foreground">For</span>
+            {DAYS.map((d) => (
+              <Button
+                key={d}
+                type="button"
+                size="sm"
+                variant="outline"
+                aria-pressed={days === d}
+                onClick={() => setDays(d)}
+                className={cn(
+                  days === d &&
+                    "border-primary! bg-primary/10! text-primary hover:bg-primary/15! hover:text-primary",
+                )}
+              >
+                {d === 1 ? "1 day" : `${d} days`}
+              </Button>
+            ))}
+          </fieldset>
+          <Button type="submit" size="sm" disabled={!ready || go.isPending}>
             {go.isPending ? "Waiting for your wallet…" : "Sign and delegate"}
           </Button>
         </div>
+        <ErrorNote error={go.error} />
       </form>
-      <ErrorNote error={go.error} />
-    </Card>
+    </div>
   );
 }
 
-function DelegationCard({ d, group, mine }: { d: Delegation; group: Group; mine: boolean }) {
+function DelegationRow({ d, group, mine }: { d: Delegation; group: Group; mine: boolean }) {
   const qc = useQueryClient();
   const sign = useSign();
   const revoke = useMutation({
@@ -231,37 +226,43 @@ function DelegationCard({ d, group, mine }: { d: Delegation; group: Group; mine:
   });
   const status = d.live ? "live" : d.revokedAt ? "revoked" : "ended";
   return (
-    <Card className="gap-4 px-5" data-testid="delegation" data-status={status}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="flex flex-wrap items-center gap-2 font-medium">
-            <Bot className="size-4 text-primary" aria-hidden />
-            {d.agentName}
+    <div className="flex flex-col gap-1 px-3 py-2" data-testid="delegation" data-status={status}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <p className="flex min-w-0 items-center gap-1.5 font-medium">
+            <Bot className="size-4 shrink-0 text-primary" aria-hidden />
+            <span className="truncate">{d.agentName}</span>
             <Badge variant="accent">agent</Badge>
           </p>
-          <p className="text-sm text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             Picks for {d.ownerName} ·{" "}
             <span className="font-mono" title={d.agent}>
               {short(d.agent)}
             </span>
-          </p>
+          </span>
         </div>
         <Badge variant={d.live ? "success" : "outline"}>{status}</Badge>
       </div>
-      <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-        <Stat label="Picks">{d.picks}</Stat>
-        <Stat label={d.live ? "Until" : d.revokedAt ? "Revoked" : "Ended"}>
-          {when(d.revokedAt ?? d.until)}
-        </Stat>
-        <Stat label="Delegated">{ago(d.createdAt)}</Stat>
-      </dl>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        <span>
+          Picks <span className="tabular font-medium text-foreground">{d.picks}</span>
+        </span>
+        <span className="text-muted-foreground/60">·</span>
+        <span>
+          {d.live ? "Until" : d.revokedAt ? "Revoked" : "Ended"}{" "}
+          <span className="tabular font-medium text-foreground">
+            {when(d.revokedAt ?? d.until)}
+          </span>
+        </span>
+        <span className="text-muted-foreground/60">·</span>
+        <span>
+          Delegated <span className="font-medium text-foreground">{ago(d.createdAt)}</span>
+        </span>
+      </div>
       {d.record.length ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {d.record.map((r) => (
-            <span
-              key={r.league}
-              className="tabular rounded-md border bg-background px-2 py-1 text-xs"
-            >
+            <span key={r.league} className="tabular text-xs text-muted-foreground">
               {r.league}: {r.hits}/{r.n} right · Brier {r.brier.toFixed(3)}
             </span>
           ))}
@@ -269,14 +270,14 @@ function DelegationCard({ d, group, mine }: { d: Delegation; group: Group; mine:
       ) : (
         <p className="text-xs text-muted-foreground">No resolved picks yet, so no record.</p>
       )}
-      <details className="rounded-lg bg-muted p-3 text-xs">
+      <details className="border-t pt-1 text-xs">
         <summary className="cursor-pointer font-medium">What the owner signed</summary>
-        <pre className="mt-2 font-mono break-all whitespace-pre-wrap text-muted-foreground">
+        <pre className="mt-1 font-mono break-all whitespace-pre-wrap text-muted-foreground">
           {d.message}
         </pre>
       </details>
       {mine && d.live ? (
-        <div>
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -289,15 +290,6 @@ function DelegationCard({ d, group, mine }: { d: Delegation; group: Group; mine:
           <ErrorNote error={revoke.error} />
         </div>
       ) : null}
-    </Card>
-  );
-}
-
-function Stat({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="tabular font-medium break-words">{children}</dd>
     </div>
   );
 }
@@ -305,9 +297,9 @@ function Stat({ label, children }: { label: string; children: ReactNode }) {
 function CopyLine({ text, label }: { text: string; label: string }) {
   const [done, setDone] = useState(false);
   return (
-    <div className="flex items-start gap-2 rounded-lg border bg-muted/60 p-3">
+    <div className="flex items-start gap-2">
       <code
-        className="min-w-0 flex-1 font-mono text-xs break-all whitespace-pre-wrap"
+        className="min-w-0 flex-1 rounded-md bg-muted/60 p-2 font-mono text-xs break-all whitespace-pre-wrap"
         data-testid={label}
       >
         {text}
@@ -333,27 +325,27 @@ function Connect({ group, me }: { group: Group; me: Member | undefined }) {
   const origin = window.location.origin;
   const stdio = `claude mcp add receipts \\\n  -e RECEIPTS_API_URL=${origin} -e RECEIPTS_GROUP=${group.id} \\\n  -e RECEIPTS_AGENT_KEY=<your agent's suiprivkey> \\\n  -- bun <repo>/apps/receipts/src/mcp/bin.ts`;
   return (
-    <Section
-      title="Connect your agent"
-      description="Receipts speaks MCP. Any agent that does (Claude Code, Cursor, your own) can read the board, Receipts' call and the leaderboard, and pick."
-    >
-      <Card className="gap-3 px-5">
-        <p className="flex items-center gap-2 font-medium">
-          <Plug className="size-4 text-primary" aria-hidden />
-          On the agent's machine: it signs its own picks
-        </p>
-        <p className="text-sm text-muted-foreground">
-          The stdio server holds the agent's key and signs each pick there. Receipts never sees the
-          key; it only checks the signature against the delegation above. Tools:{" "}
-          <span className="font-mono text-xs">
-            list_markets, get_call, submit_pick, get_receipt, leaderboard
-          </span>
-          .
-        </p>
-        <CopyLine text={stdio} label="the stdio MCP command" />
-      </Card>
-      <Tokens group={group} me={me} origin={origin} />
-    </Section>
+    <details className="border-t pt-3">
+      <summary className="cursor-pointer text-sm font-semibold">Connect your agent</summary>
+      <div className="mt-3 flex flex-col gap-3">
+        <div className="flex flex-col gap-1.5">
+          <p className="flex items-center gap-2 text-sm font-medium">
+            <Plug className="size-4 text-primary" aria-hidden />
+            On the agent's machine: it signs its own picks
+          </p>
+          <p className="text-xs text-muted-foreground">
+            The stdio server holds the agent's key; Receipts only checks the signature against the
+            delegation. Tools:{" "}
+            <span className="font-mono">
+              list_markets, get_call, submit_pick, get_receipt, leaderboard
+            </span>
+            .
+          </p>
+          <CopyLine text={stdio} label="the stdio MCP command" />
+        </div>
+        <Tokens group={group} me={me} origin={origin} />
+      </div>
+    </details>
   );
 }
 
@@ -400,15 +392,14 @@ function Tokens({ group, me, origin }: { group: Group; me: Member | undefined; o
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.tokens(group.id) }),
   });
   return (
-    <Card className="gap-3 px-5">
-      <p className="flex items-center gap-2 font-medium">
+    <div className="flex flex-col gap-2 border-t pt-3">
+      <p className="flex items-center gap-2 text-sm font-medium">
         <KeyRound className="size-4 text-primary" aria-hidden />
         Remote, read-only: a token for cloud agents
       </p>
-      <p className="text-sm text-muted-foreground">
-        Streamable HTTP at <span className="font-mono text-xs">{origin}/mcp</span>. A token reads
-        this group only and can't pick: there's no key on our side to sign with. It's shown once,
-        kept as a hash, and lasts 30 days.
+      <p className="text-xs text-muted-foreground">
+        Streamable HTTP at <span className="font-mono">{origin}/mcp</span>. A token reads this group
+        only and can't pick; it's shown once, kept as a hash, and lasts 30 days.
       </p>
       {me ? (
         <form
@@ -435,8 +426,10 @@ function Tokens({ group, me, origin }: { group: Group; me: Member | undefined; o
       )}
       <ErrorNote error={create.error} />
       {fresh ? (
-        <div className="flex flex-col gap-2 rounded-lg border border-warning/50 bg-warning/10 p-3">
-          <p className="text-sm font-medium">Copy it now: it won't be shown again.</p>
+        <div className="flex flex-col gap-1.5 border-t pt-2">
+          <p className="text-sm font-medium text-warning-foreground">
+            Copy it now: it won't be shown again.
+          </p>
           <CopyLine
             label="the remote MCP command"
             text={`claude mcp add --transport http receipts-read ${origin}/mcp \\\n  --header "Authorization: Bearer ${fresh.token}"`}
@@ -444,7 +437,7 @@ function Tokens({ group, me, origin }: { group: Group; me: Member | undefined; o
         </div>
       ) : null}
       {tokens.data?.length ? (
-        <ul className="flex flex-col divide-y rounded-lg border" data-testid="tokens">
+        <ul className="divide-y overflow-hidden rounded-lg border bg-card" data-testid="tokens">
           {tokens.data.map((t) => (
             <li
               key={t.id}
@@ -476,6 +469,6 @@ function Tokens({ group, me, origin }: { group: Group; me: Member | undefined; o
         </ul>
       ) : null}
       <ErrorNote error={revoke.error} />
-    </Card>
+    </div>
   );
 }

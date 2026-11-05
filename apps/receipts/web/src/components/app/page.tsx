@@ -26,7 +26,7 @@ export function Page({
   return (
     <div
       data-slot="page-column"
-      className={cn("flex w-full flex-col gap-6 px-4 py-6 sm:px-6 md:py-8 lg:px-10", className)}
+      className={cn("flex w-full flex-col gap-4 px-4 py-4 lg:px-6", className)}
     >
       {children}
     </div>
@@ -38,21 +38,25 @@ export function PageHeader({
   description,
   actions,
   badge,
-  eyebrow,
+  meta,
+  titleClassName,
 }: {
   title: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
   badge?: ReactNode;
-  eyebrow?: ReactNode;
+  meta?: ReactNode;
+  titleClassName?: string;
 }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="flex min-w-0 flex-col gap-1">
-        {eyebrow ? <div className="text-sm text-muted-foreground">{eyebrow}</div> : null}
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <h1 className="min-w-0 text-xl font-semibold tracking-tight md:text-2xl">{title}</h1>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          <h1 className={cn("min-w-0 text-lg font-semibold tracking-tight", titleClassName)}>
+            {title}
+          </h1>
           {badge}
+          {meta ? <div className="text-sm text-muted-foreground">{meta}</div> : null}
         </div>
         {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
       </div>
@@ -73,10 +77,10 @@ export function Section({
   children: ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="flex flex-col gap-1">
-          <h2 className="flex min-h-8 items-center text-base font-semibold">{title}</h2>
+    <section className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-col gap-0.5">
+          <h2 className="text-sm font-semibold">{title}</h2>
           {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
         </div>
         {actions ? <div className="flex shrink-0 items-center">{actions}</div> : null}

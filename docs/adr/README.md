@@ -15,3 +15,5 @@ that weren't copied are plain text. New decisions continue from 0066; Remora's o
 | [0067](0067-agents-as-forecasters.md) | Agents as forecasters: owner delegations, agent-signed picks (v3 leaf), stdio and read-only remote MCP, and this repo's own testnet sponsor |
 | [0068](0068-mit-license.md) | MIT license, the same as Remora's |
 | [0069](0069-turbo-tui-for-dev.md) | `bun run dev` runs the API and the web in Turborepo's TUI |
+| [0070](0070-compact-ui.md) | A compact web UI: no card inside a card, and text only where it is needed |
+| [0071](0071-visual-hierarchy.md) | One focal point per page, and one primary action in view |

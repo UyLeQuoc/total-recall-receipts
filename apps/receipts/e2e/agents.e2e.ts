@@ -159,7 +159,13 @@ test("an owner delegates an AI agent, it picks through MCP, and a revoke stops i
   // The board shows the agent's pick among the group's voices.
   await page.goto(`/g/${groupId}`);
   const market = page.locator(`[data-testid="market"][data-event="${made[0]?.event_id}"]`);
-  await expect(market.getByText("Forecaster, agent for Owen (test)")).toBeVisible();
+  const voice = market.getByText("Forecaster, agent for Owen (test)");
+  if (!(await voice.isVisible())) {
+    const details = market.getByRole("button", { name: "Details", exact: true });
+    if (await details.count()) await details.click();
+    else await market.getByRole("button", { name: "Pick", exact: true }).click();
+  }
+  await expect(voice).toBeVisible();
   await market.scrollIntoViewIfNeeded();
   await shoot(page, "board");
 

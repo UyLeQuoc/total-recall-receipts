@@ -33,8 +33,8 @@ export function ErrorNote({ error }: { error: unknown }) {
 /** A 🧠 chip: a conclusion Receipts acts on, linked to the Walrus Memory blob behind it. */
 export function BrainChip({ chip, groupId }: { chip: Chip; groupId: string }) {
   return (
-    <span className="inline-flex items-start gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs text-primary">
-      <Brain className="mt-px size-3.5 shrink-0" aria-label="Memory" />
+    <span className="inline-flex items-start gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
+      <Brain className="mt-px size-3 shrink-0" aria-label="Memory" />
       <span>
         {chip.text}
         {chip.blobId ? (
@@ -65,14 +65,14 @@ export type PickState =
   | "agent";
 
 const VARIANT = {
-  signed: "success",
+  signed: "outline",
   unsigned: "outline",
   anchored: "success",
-  "pending anchor": "warning",
+  "pending anchor": "outline",
   right: "success",
   wrong: "destructive",
-  source: "secondary",
-  agent: "accent",
+  source: "outline",
+  agent: "outline",
 } as const;
 
 /** One state → badge map, like Remora's StatusBadge; the text shown is the state itself. */

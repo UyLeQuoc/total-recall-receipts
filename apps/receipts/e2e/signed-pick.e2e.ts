@@ -74,6 +74,9 @@ test("a wallet joins, signs a pick, and the receipt proves it", async ({ page })
   expect(overflow, "no horizontal scroll at 375px").toBeLessThanOrEqual(0);
   await page.setViewportSize({ width: 1280, height: 900 });
 
+  if (!(await card.getByLabel("Confidence").isVisible())) {
+    await card.getByRole("button", { name: "Pick", exact: true }).click();
+  }
   await card.getByLabel("Confidence").fill("72");
   await card.getByRole("button", { name: /Sign and lock in/ }).click();
   await page.waitForURL(/\/p\//);

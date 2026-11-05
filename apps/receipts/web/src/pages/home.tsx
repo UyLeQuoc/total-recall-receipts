@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Lock, PenLine, Scale, Sparkles, Users } from "lucide-react";
+import { ChevronRight, Users } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { EmptyState } from "@/components/app/empty-state";
@@ -14,22 +14,18 @@ import { keys, useGroups } from "../hooks.ts";
 
 const STEPS = [
   {
-    icon: PenLine,
     title: "Sign your pick",
-    body: "Pick a side and how sure you are. Your wallet signs it: no gas, no app account.",
+    body: "Pick a side and how sure you are; your wallet signs it. No gas, no app account.",
   },
   {
-    icon: Lock,
     title: "Sealed before lock",
     body: "Every few minutes the group's picks are hashed into one root and anchored on Sui.",
   },
   {
-    icon: Scale,
     title: "Scored against the market",
     body: "After the final whistle, everyone is scored against the books, Polymarket and Kalshi.",
   },
   {
-    icon: Sparkles,
     title: "Receipts learns who to trust",
     body: "Trust snapshots go to Walrus Memory, and Receipts' own call cites the one it used.",
   },
@@ -52,12 +48,8 @@ export function HomePage() {
     <Page title="Receipts">
       <PageHeader
         title="The group pick'em that keeps the receipts."
-        description={
-          <>
-            Call the game before it starts. Your pick is signed by your wallet and sealed on Sui, so
-            nobody can claim they "totally called it" afterwards.
-          </>
-        }
+        titleClassName="text-2xl"
+        description="Call the game before it starts. Your pick is signed by your wallet and sealed on Sui."
       />
 
       <Section title="Groups">
@@ -70,31 +62,29 @@ export function HomePage() {
             description="Start one below and send the link to your friends."
           />
         ) : null}
-        <div className="grid gap-3 sm:grid-cols-2">
-          {groups.data?.map((g) => (
-            <Link
-              key={g.id}
-              to={`/g/${g.id}`}
-              className="group flex items-center gap-3 rounded-xl border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-accent/40"
-            >
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Users className="size-4" />
-              </span>
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="flex min-w-0 items-center gap-2">
+        {groups.data?.length ? (
+          <div className="divide-y overflow-hidden rounded-lg border bg-card">
+            {groups.data.map((g) => (
+              <Link
+                key={g.id}
+                to={`/g/${g.id}`}
+                className="group flex items-center gap-2 px-3 py-2 transition-colors hover:bg-accent/40"
+              >
+                <Users className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-center sm:gap-2">
                   <span className="truncate font-medium">{g.name}</span>
-                  {g.telegram ? <Badge variant="outline">Telegram</Badge> : null}
+                  <span className="truncate text-xs text-muted-foreground">
+                    {g.members} member{g.members === 1 ? "" : "s"} · started {ago(g.createdAt)}
+                  </span>
                 </span>
-                <span className="text-sm text-muted-foreground">
-                  {g.members} member{g.members === 1 ? "" : "s"} · started {ago(g.createdAt)}
-                </span>
-              </span>
-              <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-            </Link>
-          ))}
-        </div>
+                {g.telegram ? <Badge variant="outline">Telegram</Badge> : null}
+                <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            ))}
+          </div>
+        ) : null}
         <form
-          className="flex flex-col gap-2 rounded-xl border bg-card p-4 sm:flex-row"
+          className="flex flex-col gap-2 sm:flex-row"
           onSubmit={(e) => {
             e.preventDefault();
             if (name.trim()) create.mutate(name.trim());
@@ -118,26 +108,16 @@ export function HomePage() {
         <ErrorNote error={create.error} />
       </Section>
 
-      <div id="how" className="scroll-mt-16">
-        <Section
-          title="How it works"
-          description="Nothing here asks you to take Receipts' word for it."
-        >
-          <ol className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {STEPS.map(({ icon: Icon, title, body }, i) => (
-              <li key={title} className="flex flex-col gap-2 rounded-xl border bg-card p-4">
-                <span className="flex items-center gap-2">
-                  <Icon className="size-4 text-primary" aria-hidden />
-                  <span className="tabular text-xs font-medium text-muted-foreground">
-                    Step {i + 1}
-                  </span>
-                </span>
-                <p className="font-medium">{title}</p>
-                <p className="text-sm text-muted-foreground">{body}</p>
-              </li>
-            ))}
-          </ol>
-        </Section>
+      <div id="how" className="mt-2 scroll-mt-16">
+        <h2 className="text-sm font-semibold text-muted-foreground">How it works</h2>
+        <ol className="mt-2 grid gap-x-4 gap-y-2 text-sm text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
+          {STEPS.map(({ title, body }) => (
+            <li key={title} className="flex flex-col gap-0.5">
+              <p>{title}</p>
+              <p>{body}</p>
+            </li>
+          ))}
+        </ol>
       </div>
     </Page>
   );

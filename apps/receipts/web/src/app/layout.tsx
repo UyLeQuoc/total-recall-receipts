@@ -175,10 +175,6 @@ export function AppLayout() {
             <div className="flex min-w-0 flex-1 flex-col">
               <Outlet />
             </div>
-            <footer className="border-t px-4 py-5 text-center text-xs text-muted-foreground sm:px-6 lg:px-10">
-              Picks are signed by your wallet and anchored on Sui testnet. What Receipts learns
-              lives in Walrus Memory.
-            </footer>
           </SidebarInset>
         </SidebarProvider>
         <ThemeSync />
@@ -227,10 +223,9 @@ export function GroupLayout() {
   return (
     <Page title={group.data ? `${tab} · ${group.data.name}` : tab}>
       <PageHeader
-        eyebrow="Group"
         title={name}
         badge={group.data?.telegram ? <Badge variant="outline">Telegram</Badge> : null}
-        description={
+        meta={
           group.data
             ? `${members} member${members === 1 ? "" : "s"} · started ${ago(group.data.createdAt)}`
             : null

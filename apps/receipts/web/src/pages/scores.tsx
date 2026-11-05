@@ -21,10 +21,7 @@ export function ScoresPage() {
   return (
     <>
       <p className="max-w-3xl text-sm text-muted-foreground">
-        Brier score: the squared gap between a forecast and what happened. Lower is better; a coin
-        flip scores 0.25. Each voice's score is shrunk toward 0.25 until it has enough results, so
-        one lucky call doesn't top the table. Backfilled games count, and they're real lines and
-        real results.
+        Lower Brier is better: a coin flip scores 0.25, and few results pull a score toward it.
       </p>
       {scores.isPending ? <Spinner /> : null}
       <ErrorNote error={scores.error} />
@@ -35,65 +32,71 @@ export function ScoresPage() {
           description="The table fills in once the group's first game is final."
         />
       ) : null}
-      {scores.data?.map((lg) => (
-        <Section key={lg.league} title={lg.league}>
-          <div className="overflow-hidden rounded-xl border bg-card">
-            <Table className="min-w-[22rem]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-10 pl-4">#</TableHead>
-                  <TableHead>Voice</TableHead>
-                  <TableHead className="text-right">Right</TableHead>
-                  <TableHead className="text-right">Brier</TableHead>
-                  <TableHead className="pr-4 text-right">Trust score</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody className="tabular">
-                {lg.voices.map((v, i) => {
-                  const agent = v.voice.startsWith("agent:");
-                  const member = agent || v.voice.startsWith("member:");
-                  return (
-                    <TableRow key={v.voice}>
-                      <TableCell className="pl-4 text-muted-foreground">{i + 1}</TableCell>
-                      <TableCell className={cn(member && "font-medium")}>
-                        <span className="inline-flex items-center gap-2">
-                          {v.label}
-                          {agent ? <StateBadge state="agent" /> : null}
-                          {member ? null : <StateBadge state="source" />}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {v.hits}/{v.n}
-                      </TableCell>
-                      <TableCell className="text-right">{v.brier.toFixed(3)}</TableCell>
-                      <TableCell className="pr-4 text-right font-medium">
-                        {v.shrunk.toFixed(3)}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-          {lg.calibration.length ? (
-            <div className="flex flex-col gap-2">
-              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                Calibration: when someone said…
+      {scores.data?.map((lg) => {
+        const voices = [...lg.voices].sort((a, b) => a.shrunk - b.shrunk);
+        const top = voices[0];
+        return (
+          <Section key={lg.league} title={lg.league}>
+            {top ? (
+              <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm text-muted-foreground">
+                Most trusted:
+                <span className="text-xl font-semibold text-foreground">{top.label}</span>
+                <span className="tabular text-xl font-semibold">{top.shrunk.toFixed(3)}</span>
               </p>
-              <div className="flex flex-wrap gap-2">
+            ) : null}
+            <div className="overflow-hidden rounded-lg border bg-card">
+              <Table className="min-w-[22rem]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="h-8 w-10 pl-3">#</TableHead>
+                    <TableHead className="h-8">Voice</TableHead>
+                    <TableHead className="h-8 text-right">Right</TableHead>
+                    <TableHead className="h-8 text-right">Brier</TableHead>
+                    <TableHead className="h-8 pr-3 text-right">Trust score</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="tabular">
+                  {voices.map((v, i) => {
+                    const agent = v.voice.startsWith("agent:");
+                    const member = agent || v.voice.startsWith("member:");
+                    return (
+                      <TableRow key={v.voice} className={cn(i === 0 && "bg-muted")}>
+                        <TableCell className="py-1.5 pl-3 text-muted-foreground">{i + 1}</TableCell>
+                        <TableCell className={cn("py-1.5", member && "font-medium")}>
+                          <span className="inline-flex items-center gap-2">
+                            {v.label}
+                            {agent ? <StateBadge state="agent" /> : null}
+                            {member ? null : <StateBadge state="source" />}
+                          </span>
+                        </TableCell>
+                        <TableCell className="py-1.5 text-right text-muted-foreground">
+                          {v.hits}/{v.n}
+                        </TableCell>
+                        <TableCell className="py-1.5 text-right text-muted-foreground">
+                          {v.brier.toFixed(3)}
+                        </TableCell>
+                        <TableCell className="py-1.5 pr-3 text-right font-semibold">
+                          {v.shrunk.toFixed(3)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+            {lg.calibration.length ? (
+              <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span>Calibration:</span>
                 {lg.calibration.map((b) => (
-                  <span
-                    key={b.from}
-                    className="tabular rounded-md border bg-card px-2 py-1 text-xs"
-                  >
+                  <span key={b.from} className="tabular">
                     {pct(b.from)}+ → right {b.hits}/{b.n}
                   </span>
                 ))}
-              </div>
-            </div>
-          ) : null}
-        </Section>
-      ))}
+              </p>
+            ) : null}
+          </Section>
+        );
+      })}
     </>
   );
 }

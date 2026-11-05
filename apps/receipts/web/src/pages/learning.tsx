@@ -1,18 +1,34 @@
 import { Bot, ChartLine } from "lucide-react";
 import { useParams } from "react-router";
 import { EmptyState } from "@/components/app/empty-state";
-import { StatTile } from "@/components/app/stat-tile";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
 import type { CurvePoint, LeagueScores } from "../api.ts";
 import { ErrorNote, Spinner, StateBadge, Tag } from "../components/receipts.tsx";
 import { useLearning, useScores } from "../hooks.ts";
 
-/** Remora's chart tokens: the call in the primary indigo, the books in amber, the average muted. */
+/** Remora's chart tokens: the call in the primary indigo and thickest; the field thin, the books dashed. */
 const SERIES = [
-  { key: "weighted", label: "Receipts' call", color: "var(--chart-1)", width: 2.5 },
-  { key: "average", label: "Plain average", color: "var(--muted-foreground)", width: 1.5 },
-  { key: "books", label: "The books", color: "var(--chart-3)", width: 1.5 },
+  {
+    key: "weighted",
+    label: "Receipts' call",
+    color: "var(--primary)",
+    width: 2.5,
+    dash: undefined,
+  },
+  {
+    key: "average",
+    label: "Plain average",
+    color: "var(--muted-foreground)",
+    width: 1,
+    dash: undefined,
+  },
+  {
+    key: "books",
+    label: "The books",
+    color: "color-mix(in oklab, var(--muted-foreground) 45%, var(--foreground))",
+    width: 1,
+    dash: "5 3",
+  },
 ] as const;
 
 /** Mean Brier so far (lower is better) after each resolved game, walking forward in time. */
@@ -37,7 +53,7 @@ function Curve({ points, title }: { points: CurvePoint[]; title: string }) {
       .filter(Boolean)
       .join(" ");
   return (
-    <figure className="flex flex-col gap-3">
+    <figure className="flex flex-col gap-2">
       <svg viewBox={`0 0 ${w} ${h}`} className="h-auto w-full" role="img" aria-label={title}>
         {ticks.map((t) => (
           <g key={t}>
@@ -70,6 +86,7 @@ function Curve({ points, title }: { points: CurvePoint[]; title: string }) {
             fill="none"
             stroke={s.color}
             strokeWidth={s.width}
+            strokeDasharray={s.dash}
             strokeLinejoin="round"
             strokeLinecap="round"
           />
@@ -78,7 +95,18 @@ function Curve({ points, title }: { points: CurvePoint[]; title: string }) {
       <figcaption className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
         {SERIES.map((s) => (
           <span key={s.key} className="inline-flex items-center gap-1.5">
-            <span className="inline-block h-0.5 w-4 rounded-full" style={{ background: s.color }} />
+            <svg viewBox="0 0 16 8" className="h-2 w-4 shrink-0" aria-hidden>
+              <line
+                x1="0"
+                y1="4"
+                x2="16"
+                y2="4"
+                stroke={s.color}
+                strokeWidth={s.width}
+                strokeDasharray={s.dash}
+                strokeLinecap="round"
+              />
+            </svg>
             {s.label}
           </span>
         ))}
@@ -104,33 +132,35 @@ function AgentsVsField({ scores }: { scores: LeagueScores[] }) {
     .filter((lg) => lg.agents);
   if (!leagues.length) return null;
   return (
-    <section className="flex flex-col gap-3" data-testid="agents-vs-field">
-      <h2 className="flex items-center gap-2 text-base font-semibold">
+    <section className="flex flex-col gap-2" data-testid="agents-vs-field">
+      <h2 className="flex items-center gap-2 text-sm font-semibold">
         <Bot className="size-4 text-primary" aria-hidden />
         Agents next to the field
       </h2>
-      {leagues.map((lg) => (
-        <Card key={lg.league} className="gap-2 px-5">
-          <p className="text-sm font-medium">{lg.league}</p>
-          <ul className="flex flex-col divide-y text-sm">
-            {[...lg.rows]
-              .sort((a, b) => a.shrunk - b.shrunk)
-              .map((v) => (
-                <li key={v.voice} className="flex items-center justify-between gap-3 py-2">
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span className="truncate">{v.label}</span>
-                    {v.voice.startsWith("agent:") ? <StateBadge state="agent" /> : null}
-                    {SOURCES.has(v.voice) ? <StateBadge state="source" /> : null}
-                  </span>
-                  <span className="tabular shrink-0 text-muted-foreground">
-                    {v.hits}/{v.n} ·{" "}
-                    <span className="font-medium text-foreground">{v.brier.toFixed(3)}</span>
-                  </span>
-                </li>
-              ))}
-          </ul>
-        </Card>
-      ))}
+      <div className="divide-y overflow-hidden rounded-lg border bg-card">
+        {leagues.map((lg) => (
+          <div key={lg.league} className="px-3 py-2">
+            <p className="text-sm font-medium">{lg.league}</p>
+            <ul className="flex flex-col text-sm">
+              {[...lg.rows]
+                .sort((a, b) => a.shrunk - b.shrunk)
+                .map((v) => (
+                  <li key={v.voice} className="flex items-center justify-between gap-3 py-1">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate">{v.label}</span>
+                      {v.voice.startsWith("agent:") ? <StateBadge state="agent" /> : null}
+                      {SOURCES.has(v.voice) ? <StateBadge state="source" /> : null}
+                    </span>
+                    <span className="tabular shrink-0 text-muted-foreground">
+                      {v.hits}/{v.n} ·{" "}
+                      <span className="font-medium text-foreground">{v.brier.toFixed(3)}</span>
+                    </span>
+                  </li>
+                ))}
+            </ul>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
@@ -139,16 +169,15 @@ export function LearningPage() {
   const { id = "" } = useParams();
   const learning = useLearning(id);
   const scores = useScores(id);
+  const leagues = (learning.data ?? []).filter((lg) => lg.curve.length > 0);
   return (
     <>
       <p className="max-w-3xl text-sm text-muted-foreground">
-        Is Receipts getting better? Walking forward through every resolved market, each call is
-        weighted only by what was learned before it. Lower is better. Backfilled games (NBA since
-        Oct 20, recent EPL) are real lines and real results, fetched after the fact and labelled.
+        Each call is weighted only by what was known before it.
       </p>
       {learning.isPending ? <Spinner /> : null}
       <ErrorNote error={learning.error} />
-      {learning.data && !learning.data.length ? (
+      {learning.data && !leagues.length ? (
         <EmptyState
           icon={<ChartLine />}
           title="Nothing resolved yet"
@@ -156,48 +185,78 @@ export function LearningPage() {
         />
       ) : null}
       {scores.data ? <AgentsVsField scores={scores.data} /> : null}
-      <div className="flex flex-col gap-6" data-testid="learning">
-        {learning.data?.map((lg) => {
-          const last = lg.curve.at(-1);
-          return (
-            <section key={lg.league} className="flex flex-col gap-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-base font-semibold">{lg.league}</h2>
-                <div className="flex gap-1">
-                  <Tag>{lg.curve.length} games</Tag>
-                  <Badge variant="warning">{lg.backfilled} backfilled</Badge>
+      {leagues.length ? (
+        <div className="grid items-start gap-4 xl:grid-cols-2" data-testid="learning">
+          {leagues.map((lg) => {
+            const last = lg.curve.at(-1);
+            const gap =
+              last && last.books !== null ? Number((last.weighted - last.books).toFixed(3)) : null;
+            const compared =
+              gap === null
+                ? null
+                : gap === 0
+                  ? "Same as the books"
+                  : gap < 0
+                    ? `${Math.abs(gap).toFixed(3)} better than the books`
+                    : `${gap.toFixed(3)} worse than the books`;
+            return (
+              <section key={lg.league} className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold">{lg.league}</h2>
+                  <div className="flex gap-1">
+                    <Tag>{lg.curve.length} games</Tag>
+                    {lg.backfilled ? (
+                      <Badge variant="outline">{lg.backfilled} backfilled</Badge>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-              {last ? (
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <StatTile
-                    label="Receipts' call"
-                    value={last.weighted.toFixed(3)}
-                    hint={`Brier after ${last.n} games`}
-                  />
-                  <StatTile label="Plain average" value={last.average.toFixed(3)} />
-                  <StatTile
-                    label="The books"
-                    value={last.books !== null ? last.books.toFixed(3) : "—"}
-                  />
-                </div>
-              ) : null}
-              <Card className="px-5">
-                <Curve points={lg.curve} title={`${lg.league} learning curve`} />
-                {lg.curve.every(
-                  (p) =>
-                    Math.abs(p.weighted - p.average) < 1e-9 &&
-                    Math.abs(p.average - (p.books ?? p.average)) < 1e-9,
-                ) ? (
-                  <p className="text-xs text-muted-foreground">
-                    Only one voice has a number for these games, so the three lines are the same.
-                  </p>
+                {last ? (
+                  <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Receipts' call</p>
+                      <p className="text-3xl font-semibold tabular text-primary">
+                        {last.weighted.toFixed(3)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Plain average</p>
+                      <p className="text-lg tabular text-muted-foreground">
+                        {last.average.toFixed(3)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">The books</p>
+                      <p className="text-lg tabular text-muted-foreground">
+                        {last.books !== null ? last.books.toFixed(3) : "—"}
+                      </p>
+                    </div>
+                    {compared ? (
+                      <p className="text-xs text-muted-foreground">
+                        {compared} · after {last.n} games
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">after {last.n} games</p>
+                    )}
+                  </div>
                 ) : null}
-              </Card>
-            </section>
-          );
-        })}
-      </div>
+                <div className="flex flex-col gap-2 pt-1">
+                  <Curve points={lg.curve} title={`${lg.league} learning curve`} />
+                  {lg.curve.length >= 2 &&
+                  lg.curve.every(
+                    (p) =>
+                      Math.abs(p.weighted - p.average) < 1e-9 &&
+                      Math.abs(p.average - (p.books ?? p.average)) < 1e-9,
+                  ) ? (
+                    <p className="text-xs text-muted-foreground">
+                      Only one voice has a number for these games, so the three lines are the same.
+                    </p>
+                  ) : null}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      ) : null}
     </>
   );
 }

@@ -24,14 +24,16 @@ import { short } from "../format.ts";
 export function WalletButton({
   className,
   label = "Connect wallet",
+  variant = "default",
 }: {
   className?: string;
   label?: string;
+  variant?: "default" | "outline";
 }) {
   return (
     <ConnectModal
       trigger={
-        <Button className={className} aria-haspopup="dialog">
+        <Button variant={variant} className={className} aria-haspopup="dialog">
           <Wallet />
           {label}
         </Button>
@@ -63,7 +65,12 @@ export function AccountMenu() {
       return (
         <ConnectModal
           trigger={
-            <Button size="icon-sm" aria-label="Connect wallet" aria-haspopup="dialog">
+            <Button
+              variant="outline"
+              size="icon-sm"
+              aria-label="Connect wallet"
+              aria-haspopup="dialog"
+            >
               <Wallet />
             </Button>
           }
@@ -72,7 +79,7 @@ export function AccountMenu() {
     }
     return (
       <div className="flex w-full items-center gap-1">
-        <WalletButton className="flex-1" />
+        <WalletButton variant="outline" className="flex-1" />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
